@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Ubuntu 22.04 CLI tools installer
-# Interactive TUI:
-#   ./scripts/install-cli-tools.sh
-# Non-interactive examples:
-#   ./scripts/install-cli-tools.sh all
-#   ./scripts/install-cli-tools.sh argocd
-#   ./scripts/install-cli-tools.sh crictl
-#   ./scripts/install-cli-tools.sh yq
+# Ubuntu 22.04 DevOps Toolbelt Installer
+# DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.
 
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
@@ -19,6 +13,7 @@ HELM_VERSION="${HELM_VERSION:-}"             # Example: v3.19.0. Empty = latest 
 CRICTL_VERSION="${CRICTL_VERSION:-latest}"   # Example: v1.34.0 or latest
 YQ_VERSION="${YQ_VERSION:-latest}"           # Example: v4.48.1 or latest
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+LOG_FILE="${LOG_FILE:-/tmp/devops-toolbelt-install-$(date +%Y%m%d-%H%M%S).log}"
 
 SUDO=""
 if [[ "${EUID}" -ne 0 ]]; then
@@ -38,13 +33,20 @@ if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/nul
   MAGENTA="$(tput setaf 5)"
   CYAN="$(tput setaf 6)"
 else
-  RESET=""; BOLD=""; RED=""; GREEN=""; YELLOW=""; BLUE=""; MAGENTA=""; CYAN=""
+  RESET=""
+  BOLD=""
+  RED=""
+  GREEN=""
+  YELLOW=""
+  BLUE=""
+  MAGENTA=""
+  CYAN=""
 fi
 
-info()    { echo -e "${BLUE}==>${RESET} $*"; }
-success() { echo -e "${GREEN}✔${RESET} $*"; }
-warn()    { echo -e "${YELLOW}WARN:${RESET} $*"; }
-error()   { echo -e "${RED}ERROR:${RESET} $*" >&2; }
+info()    { echo -e "${BLUE}==>${RESET} $*" | tee -a "${LOG_FILE}"; }
+success() { echo -e "${GREEN}✔${RESET} $*" | tee -a "${LOG_FILE}"; }
+warn()    { echo -e "${YELLOW}WARN:${RESET} $*" | tee -a "${LOG_FILE}"; }
+error()   { echo -e "${RED}ERROR:${RESET} $*" | tee -a "${LOG_FILE}" >&2; }
 die()     { error "$*"; exit 1; }
 
 pause_menu() {
@@ -55,11 +57,25 @@ pause_menu() {
 }
 
 run() {
-  echo -e "${MAGENTA}+${RESET} $*"
-  "$@"
+  echo -e "${MAGENTA}+${RESET} $*" | tee -a "${LOG_FILE}"
+  "$@" 2>&1 | tee -a "${LOG_FILE}"
+  return "${PIPESTATUS[0]}"
 }
 
 # ---------- Helpers ----------
+preflight() {
+  touch "${LOG_FILE}" 2>/dev/null || die "Cannot write log file: ${LOG_FILE}"
+
+  if [[ "${EUID}" -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
+    die "sudo is required when not running as root. Install sudo or run this script as root."
+  fi
+
+  if [[ ":${PATH}:" != *":/usr/local/bin:"* ]]; then
+    warn "/usr/local/bin is not in PATH. Tools installed there may verify as missing until PATH is updated."
+    warn "Temporary fix: export PATH=/usr/local/bin:\$PATH"
+  fi
+}
+
 detect_ubuntu() {
   if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -84,11 +100,11 @@ get_arch() {
   esac
 }
 
-github_latest_tag() {
+latest_github_tag() {
   local repo="$1"
-  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
-    | grep -m1 '"tag_name":' \
-    | sed -E 's/.*"tag_name": "([^"]+)".*/\1/'
+  local effective_url
+  effective_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${repo}/releases/latest")"
+  echo "${effective_url}" | sed -E 's#^.*/tag/([^/?#]+).*$#\1#'
 }
 
 apt_update_once() {
@@ -110,7 +126,9 @@ install_base_packages() {
     lsb-release \
     apt-transport-https \
     unzip \
-    tar
+    tar \
+    gzip \
+    openssl
 }
 
 install_apt_package() {
@@ -118,12 +136,14 @@ install_apt_package() {
   install_base_packages
   info "Installing ${pkg} via apt"
   run ${SUDO} apt-get install -y "${pkg}"
+  command -v "${pkg}" >/dev/null 2>&1 || die "${pkg} was installed by apt but is not in PATH"
   success "${pkg} installed"
 }
 
 # ---------- Individual installers ----------
 install_argocd() {
   install_base_packages
+
   local arch url tmp
   arch="$(get_arch)"
 
@@ -139,15 +159,18 @@ install_argocd() {
   run chmod +x "${tmp}"
   run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/argocd"
   rm -f "${tmp}"
+
+  command -v argocd >/dev/null 2>&1 || die "argocd installed to ${INSTALL_DIR}, but argocd is not in PATH"
   success "argocd installed at ${INSTALL_DIR}/argocd"
 }
 
 install_vault() {
   install_base_packages
-  info "Adding HashiCorp apt repository"
 
+  info "Adding HashiCorp apt repository"
   local key_tmp repo_line
   key_tmp="$(mktemp)"
+
   run curl -fsSL https://apt.releases.hashicorp.com/gpg -o "${key_tmp}.asc"
   run gpg --dearmor -o "${key_tmp}.gpg" "${key_tmp}.asc"
   run ${SUDO} install -m 0644 "${key_tmp}.gpg" /usr/share/keyrings/hashicorp-archive-keyring.gpg
@@ -158,17 +181,28 @@ install_vault() {
 
   APT_UPDATED=0
   apt_update_once
+
   info "Installing Vault CLI"
   run ${SUDO} apt-get install -y vault
+  command -v vault >/dev/null 2>&1 || die "vault was installed but is not in PATH"
   success "vault installed"
 }
 
-install_jq() { install_apt_package "jq"; }
-install_git() { install_apt_package "git"; }
-install_make() { install_apt_package "make"; }
+install_jq() {
+  install_apt_package "jq"
+}
+
+install_git() {
+  install_apt_package "git"
+}
+
+install_make() {
+  install_apt_package "make"
+}
 
 install_k9s() {
   install_base_packages
+
   local arch url deb
   arch="$(get_arch)"
 
@@ -183,11 +217,14 @@ install_k9s() {
   run curl -fsSL -o "${deb}" "${url}"
   run ${SUDO} apt-get install -y "${deb}"
   rm -f "${deb}"
+
+  command -v k9s >/dev/null 2>&1 || die "k9s was installed but is not in PATH"
   success "k9s installed"
 }
 
 install_helm() {
   install_base_packages
+
   local helm_script script_url
   helm_script="$(mktemp)"
   script_url="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-${HELM_MAJOR}"
@@ -198,25 +235,32 @@ install_helm() {
 
   if [[ -n "${HELM_VERSION}" ]]; then
     info "Pinning Helm version: ${HELM_VERSION}"
-    DESIRED_VERSION="${HELM_VERSION}" "${helm_script}"
+    DESIRED_VERSION="${HELM_VERSION}" "${helm_script}" 2>&1 | tee -a "${LOG_FILE}"
+    rc="${PIPESTATUS[0]}"
+    [[ "${rc}" -eq 0 ]] || return "${rc}"
   else
-    "${helm_script}"
+    "${helm_script}" 2>&1 | tee -a "${LOG_FILE}"
+    rc="${PIPESTATUS[0]}"
+    [[ "${rc}" -eq 0 ]] || return "${rc}"
   fi
 
   rm -f "${helm_script}"
+  command -v helm >/dev/null 2>&1 || die "helm was installed but is not in PATH"
   success "helm installed"
 }
 
 install_crictl() {
   install_base_packages
+
   local arch version url tmpdir archive
   arch="$(get_arch)"
 
   if [[ "${CRICTL_VERSION}" == "latest" ]]; then
-    version="$(github_latest_tag "kubernetes-sigs/cri-tools")"
+    version="$(latest_github_tag "kubernetes-sigs/cri-tools")"
   else
     version="${CRICTL_VERSION}"
   fi
+
   [[ -n "${version}" ]] || die "Unable to determine crictl version."
 
   url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${version}/crictl-${version}-linux-${arch}.tar.gz"
@@ -228,65 +272,76 @@ install_crictl() {
   run tar -xzf "${archive}" -C "${tmpdir}"
   run ${SUDO} install -m 0755 "${tmpdir}/crictl" "${INSTALL_DIR}/crictl"
   rm -rf "${tmpdir}"
+
+  command -v crictl >/dev/null 2>&1 || die "crictl installed to ${INSTALL_DIR}, but crictl is not in PATH"
   success "crictl installed at ${INSTALL_DIR}/crictl"
 }
 
 install_yq() {
   install_base_packages
+
   local arch version url tmp
   arch="$(get_arch)"
 
   if [[ "${YQ_VERSION}" == "latest" ]]; then
-    version="$(github_latest_tag "mikefarah/yq")"
+    url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${arch}"
+    version="latest"
   else
     version="${YQ_VERSION}"
+    url="https://github.com/mikefarah/yq/releases/download/${version}/yq_linux_${arch}"
   fi
-  [[ -n "${version}" ]] || die "Unable to determine yq version."
 
-  url="https://github.com/mikefarah/yq/releases/download/${version}/yq_linux_${arch}"
   tmp="$(mktemp)"
-
   info "Installing yq (${version})"
   run curl -fsSL -o "${tmp}" "${url}"
   run chmod +x "${tmp}"
   run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/yq"
   rm -f "${tmp}"
-  success "yq installed at ${INSTALL_DIR}/yq"
-}
 
-install_all() {
-  echo -e "${BOLD}${CYAN}Installing all CLI tools${RESET}"
-  install_jq
-  install_yq
-  install_git
-  install_make
-  install_helm
-  install_argocd
-  install_vault
-  install_k9s
-  install_crictl
-  verify_all
+  command -v yq >/dev/null 2>&1 || die "yq installed to ${INSTALL_DIR}, but yq is not in PATH"
+  success "yq installed at ${INSTALL_DIR}/yq"
 }
 
 # ---------- Verification ----------
 version_of() {
   local tool="$1"
+
   if ! command -v "${tool}" >/dev/null 2>&1; then
     echo -e "${RED}missing${RESET}"
     return 1
   fi
 
   case "${tool}" in
-    argocd) argocd version --client --short 2>/dev/null || argocd version --client 2>/dev/null || true ;;
-    vault) vault version 2>/dev/null || true ;;
-    jq) jq --version 2>/dev/null || true ;;
-    git) git --version 2>/dev/null || true ;;
-    make) make --version 2>/dev/null | head -n 1 || true ;;
-    k9s) k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true ;;
-    helm) helm version --short 2>/dev/null || helm version 2>/dev/null || true ;;
-    crictl) crictl --version 2>/dev/null || true ;;
-    yq) yq --version 2>/dev/null || true ;;
-    *) "${tool}" --version 2>/dev/null || true ;;
+    argocd)
+      argocd version --client --short 2>/dev/null || argocd version --client 2>/dev/null || true
+      ;;
+    vault)
+      vault version 2>/dev/null || true
+      ;;
+    jq)
+      jq --version 2>/dev/null || true
+      ;;
+    git)
+      git --version 2>/dev/null || true
+      ;;
+    make)
+      make --version 2>/dev/null | head -n 1 || true
+      ;;
+    k9s)
+      k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true
+      ;;
+    helm)
+      helm version --short 2>/dev/null || helm version 2>/dev/null || true
+      ;;
+    crictl)
+      crictl --version 2>/dev/null || true
+      ;;
+    yq)
+      yq --version 2>/dev/null || true
+      ;;
+    *)
+      "${tool}" --version 2>/dev/null || true
+      ;;
   esac
 }
 
@@ -307,6 +362,72 @@ verify_all() {
   done
 }
 
+# ---------- Install all with per-tool summary ----------
+install_one_with_summary() {
+  local label="$1"
+  local func="$2"
+  local rc=0
+
+  echo
+  echo -e "${BOLD}${CYAN}--- Installing ${label} ---${RESET}" | tee -a "${LOG_FILE}"
+
+  set +e
+  (
+    set -Eeuo pipefail
+    "${func}"
+  )
+  rc=$?
+  set -Eeuo pipefail
+
+  if [[ "${rc}" -eq 0 ]]; then
+    INSTALL_OK+=("${label}")
+    success "${label} install finished"
+  else
+    INSTALL_FAILED+=("${label}")
+    error "${label} install failed with exit code ${rc}"
+  fi
+}
+
+install_all() {
+  INSTALL_OK=()
+  INSTALL_FAILED=()
+
+  echo -e "${BOLD}${CYAN}Installing all CLI tools${RESET}"
+  echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
+  echo
+
+  # Apt-based tools first.
+  install_one_with_summary "jq" "install_jq"
+  install_one_with_summary "git" "install_git"
+  install_one_with_summary "make" "install_make"
+
+  # Upstream release/repo-based tools.
+  install_one_with_summary "helm" "install_helm"
+  install_one_with_summary "argocd" "install_argocd"
+  install_one_with_summary "vault" "install_vault"
+  install_one_with_summary "k9s" "install_k9s"
+  install_one_with_summary "crictl" "install_crictl"
+  install_one_with_summary "yq" "install_yq"
+
+  echo
+  echo -e "${BOLD}${CYAN}Install summary${RESET}"
+  if [[ "${#INSTALL_OK[@]}" -gt 0 ]]; then
+    echo -e "${GREEN}Succeeded:${RESET} ${INSTALL_OK[*]}"
+  fi
+  if [[ "${#INSTALL_FAILED[@]}" -gt 0 ]]; then
+    echo -e "${RED}Failed:${RESET} ${INSTALL_FAILED[*]}"
+    echo -e "${YELLOW}Review log:${RESET} ${LOG_FILE}"
+  else
+    echo -e "${GREEN}All tools installed successfully.${RESET}"
+  fi
+
+  verify_all
+
+  if [[ "${#INSTALL_FAILED[@]}" -gt 0 ]]; then
+    return 1
+  fi
+}
+
 # ---------- TUI ----------
 menu_row() {
   local number="$1"
@@ -316,10 +437,13 @@ menu_row() {
 }
 
 print_menu() {
-  if [[ -t 1 ]]; then clear || true; fi
+  if [[ -t 1 ]]; then
+    clear || true
+  fi
 
   echo -e "${BOLD}${CYAN}Ubuntu 22.04 DevOps Toolbelt Installer${RESET}"
   echo -e "${YELLOW}DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.${RESET}"
+  echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
   echo
   menu_row "1"  "Install ALL tools"    "Install every CLI listed below"
   menu_row "2"  "Argo CD CLI"          "GitOps continuous delivery CLI"
@@ -351,7 +475,7 @@ interactive_menu() {
     echo
 
     case "${choice}" in
-      1) install_all ;;
+      1) install_all || true ;;
       2) install_argocd ;;
       3) install_vault ;;
       4) install_jq ;;
@@ -362,8 +486,13 @@ interactive_menu() {
       9) install_crictl ;;
       10) install_yq ;;
       11) verify_all ;;
-      0|q|Q|quit|exit) echo -e "${GREEN}Goodbye.${RESET}"; exit 0 ;;
-      *) warn "Invalid option: ${choice}" ;;
+      0|q|Q|quit|exit)
+        echo -e "${GREEN}Goodbye.${RESET}"
+        exit 0
+        ;;
+      *)
+        warn "Invalid option: ${choice}"
+        ;;
     esac
 
     pause_menu
@@ -386,11 +515,16 @@ Examples:
   HELM_VERSION=v3.19.0 $0 helm
   CRICTL_VERSION=v1.34.0 $0 crictl
   YQ_VERSION=v4.48.1 $0 yq
+
+Log file:
+  ${LOG_FILE}
 EOF
 }
 
 main() {
+  preflight
   detect_ubuntu
+
   local cmd="${1:-menu}"
 
   case "${cmd}" in
@@ -407,7 +541,10 @@ main() {
     yq) install_yq ;;
     verify) verify_all ;;
     help|-h|--help) usage ;;
-    *) usage; die "Unknown command: ${cmd}" ;;
+    *)
+      usage
+      die "Unknown command: ${cmd}"
+      ;;
   esac
 }
 

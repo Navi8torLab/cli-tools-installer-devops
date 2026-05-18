@@ -1,6 +1,6 @@
 # Ubuntu 22.04 DevOps Toolbelt Installer
 
-These are common DevOps and Kubernetes tools used to build, deploy, debug, and operate cloud-native infrastructure, GitOps workflows, secrets management, and container runtime troubleshooting on Ubuntu 22.04.
+DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.
 
 ## Tool list
 
@@ -14,12 +14,12 @@ These are common DevOps and Kubernetes tools used to build, deploy, debug, and o
 | `k9s` | Terminal UI for Kubernetes cluster operations |
 | `helm` | Kubernetes package manager for Helm charts |
 | `crictl` | CLI for debugging CRI-compatible container runtimes such as containerd |
-| `yq` | YAML, JSON, XML, CSV, TOML, and properties processor |
+| `yq` | YAML/JSON processor |
 
 ## Files
 
 ```text
-cli-tools-installer-tui/
+cli-tools-installer-devops-toolbelt-fixed/
 ├── Makefile
 └── scripts/
     └── install-cli-tools.sh
@@ -67,6 +67,12 @@ Equivalent direct script command:
 ./scripts/install-cli-tools.sh all
 ```
 
+The install-all option now installs each tool independently. If one tool fails, the script keeps going, prints a final install summary, and writes a log file under `/tmp`, for example:
+
+```text
+/tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
+```
+
 ## Install one tool at a time
 
 ```bash
@@ -109,11 +115,33 @@ Or:
 
 ## Version overrides
 
+Install a specific Argo CD CLI version:
+
 ```bash
 make argocd ARGOCD_VERSION=v3.2.0
+```
+
+Install a specific k9s version:
+
+```bash
 make k9s K9S_VERSION=v0.50.9
+```
+
+Install a specific Helm 3 version:
+
+```bash
 make helm HELM_MAJOR=3 HELM_VERSION=v3.19.0
+```
+
+Install a specific crictl version:
+
+```bash
 make crictl CRICTL_VERSION=v1.34.0
+```
+
+Install a specific yq version:
+
+```bash
 make yq YQ_VERSION=v4.48.1
 ```
 
@@ -141,6 +169,33 @@ Then use:
 
 ```bash
 make install
+```
+
+## Troubleshooting
+
+If a tool still shows as `missing`, check whether `/usr/local/bin` is in your PATH:
+
+```bash
+echo "$PATH"
+command -v argocd vault helm crictl yq
+```
+
+Temporary PATH fix:
+
+```bash
+export PATH=/usr/local/bin:$PATH
+```
+
+Review the installer log:
+
+```bash
+ls -lt /tmp/devops-toolbelt-install-*.log | head
+```
+
+Then open the newest log:
+
+```bash
+less /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 ```
 
 ## Install method notes
