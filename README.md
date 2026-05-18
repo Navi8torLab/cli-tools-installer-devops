@@ -32,12 +32,6 @@ chmod +x scripts/install-cli-tools.sh
 ./scripts/install-cli-tools.sh
 ```
 
-Or with Make:
-
-```bash
-make menu
-```
-
 Menu layout:
 
 ```text
