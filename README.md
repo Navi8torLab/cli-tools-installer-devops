@@ -58,12 +58,6 @@ Menu layout:
 ## Install everything
 
 ```bash
-make install
-```
-
-Equivalent direct script command:
-
-```bash
 ./scripts/install-cli-tools.sh all
 ```
 
