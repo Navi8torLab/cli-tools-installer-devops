@@ -25,11 +25,32 @@ cli-tools-installer-devops-toolbelt-fixed/
     └── install-cli-tools.sh
 ```
 
+## If Make is not installed yet
+
+Run the script directly first:
+
+```bash
+chmod +x scripts/install-cli-tools.sh
+./scripts/install-cli-tools.sh make
+```
+
+Then use:
+
+```bash
+make install
+```
+
 ## Interactive colored TUI menu
 
 ```bash
 chmod +x scripts/install-cli-tools.sh
 ./scripts/install-cli-tools.sh
+```
+
+Or with Make:
+
+```bash
+make menu
 ```
 
 Menu layout:
@@ -50,6 +71,12 @@ Menu layout:
 ```
 
 ## Install everything
+
+```bash
+make install
+```
+
+Equivalent direct script command:
 
 ```bash
 ./scripts/install-cli-tools.sh all
@@ -142,21 +169,6 @@ HELM_MAJOR=3
 HELM_VERSION=
 CRICTL_VERSION=latest
 YQ_VERSION=latest
-```
-
-## If Make is not installed yet
-
-Run the script directly first:
-
-```bash
-chmod +x scripts/install-cli-tools.sh
-./scripts/install-cli-tools.sh make
-```
-
-Then use:
-
-```bash
-make install
 ```
 
 ## Troubleshooting
