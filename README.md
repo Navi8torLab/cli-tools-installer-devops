@@ -1,4 +1,4 @@
-# Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
+# Ubuntu 22.04 - 26.04 LTS - 26.04 LTS DevOps & Kubernetes Toolbelt Installer
 
 Build a workstation or bastion host with categorized CLI tools for Kubernetes operations, GitOps deployments, secrets management, runtime debugging, observability, and workflow automation.
 
@@ -80,7 +80,7 @@ make menu
 
 ```text
 ====================================================================
- Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
+ Ubuntu 22.04 - 26.04 LTS DevOps & Kubernetes Toolbelt Installer
 ====================================================================
 
 Purpose:
@@ -276,6 +276,15 @@ make install
 ```
 
 ## Troubleshooting
+
+### Kubecolor parser fix
+
+This bundle avoids using `include` as an `awk` variable name because newer `gawk` versions can treat `include` as a reserved/builtin token. The release asset parser now uses `grep`/`sed` instead, which avoids this error:
+
+```text
+awk: fatal: cannot use gawk builtin `include' as variable name
+```
+
 
 ### Base dependency fix
 

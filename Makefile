@@ -43,7 +43,7 @@ export KUBESPY_VERSION
 	vault kubespy bootstrap
 
 help:
-	@echo "Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer"
+	@echo "Ubuntu 22.04 - 26.04 LTS DevOps & Kubernetes Toolbelt Installer"
 	@echo "Build a workstation or bastion host with categorized CLI tools for Kubernetes operations,"
 	@echo "GitOps deployments, secrets management, runtime debugging, and workflow automation."
 	@echo

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
+# Ubuntu 22.04 - 26.04 LTS DevOps & Kubernetes Toolbelt Installer
 # Build a workstation or bastion host with common CLI tools used for Kubernetes operations,
 # GitOps deployments, secrets management, YAML/JSON processing, container runtime troubleshooting,
 # and terminal productivity.
@@ -95,7 +95,7 @@ detect_ubuntu() {
     # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "${ID:-}" != "ubuntu" ]]; then
-      warn "This script was built for Ubuntu 22.04 and newer. Detected: ${PRETTY_NAME:-unknown Linux}."
+      warn "This script was built for Ubuntu 22.04 - 26.04 LTS. Detected: ${PRETTY_NAME:-unknown Linux}."
     fi
   else
     warn "Cannot read /etc/os-release. Continuing anyway."
@@ -146,7 +146,8 @@ extract_first_release_asset_url() {
   local include_regex="$2"
   local exclude_regex="${3:-(__never_match__)}"
 
-  awk -F'"' '/"browser_download_url":/ {print $4}' "${json_file}" \
+  grep '"browser_download_url":' "${json_file}" \
+    | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' \
     | grep -Ei "${include_regex}" \
     | grep -Evi "${exclude_regex}" \
     | head -n 1
@@ -157,11 +158,11 @@ extract_release_asset_url_awk() {
   local include_regex="$2"
   local exclude_regex="${3:-$^}"
 
-  awk -v include="${include_regex}" -v exclude="${exclude_regex}" -F'"' '
+  awk -v asset_include_regex="${include_regex}" -v exclude="${exclude_regex}" -F'"' '
     /"browser_download_url":/ {
       url=$4
       low=tolower(url)
-      if (low ~ tolower(include) && low !~ tolower(exclude)) {
+      if (low ~ tolower(asset_include_regex) && low !~ tolower(exclude)) {
         print url
         exit
       }
@@ -407,7 +408,7 @@ install_kubectx_kubens() {
 install_kubie() {
   install_base_packages
 
-  local version json include url tmpdir asset download_path binary
+  local version json asset_include_regex url tmpdir asset download_path binary
   if [[ "${KUBIE_VERSION}" == "latest" ]]; then
     version="latest"
   else
@@ -420,8 +421,8 @@ install_kubie() {
   info "Finding Kubie release asset (${version})"
   download_github_release_json "kubie-org/kubie" "${version}" "${json}"
 
-  include="$(get_kubie_arch_pattern)"
-  url="$(extract_first_release_asset_url "${json}" "${include}" "(sha|checksum|\.txt|\.sig|\.asc)$")"
+  asset_pattern="$(get_kubie_arch_pattern)"
+  url="$(extract_first_release_asset_url "${json}" "${asset_pattern}" "(sha|checksum|\.txt|\.sig|\.asc)$")"
 
   if [[ -z "${url}" ]]; then
     rm -rf "${tmpdir}"
@@ -980,7 +981,7 @@ print_menu() {
   fi
 
   echo -e "${BOLD}${CYAN}====================================================================${RESET}"
-  echo -e "${BOLD}${CYAN} Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer${RESET}"
+  echo -e "${BOLD}${CYAN} Ubuntu 22.04 - 26.04 LTS DevOps & Kubernetes Toolbelt Installer${RESET}"
   echo -e "${BOLD}${CYAN}====================================================================${RESET}"
   echo
   echo -e "${YELLOW}Purpose:${RESET}"
