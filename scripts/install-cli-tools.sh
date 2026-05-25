@@ -954,6 +954,57 @@ install_all() {
   fi
 }
 
+verify_core_tools() {
+  echo
+  echo -e "${BOLD}${CYAN}Core Tools CLI versions${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+
+  for tool in argocd vault jq git make k9s helm crictl yq kustomize; do
+    verify_tool "${tool}"
+  done
+}
+
+install_core_tools() {
+  INSTALL_OK=()
+  INSTALL_FAILED=()
+
+  echo -e "${BOLD}${CYAN}Installing Core Tools only${RESET}"
+  echo -e "${YELLOW}Core Tools:${RESET} argocd vault jq git make k9s helm crictl yq kustomize"
+  echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
+  echo
+
+  install_one_with_summary "Argo CD CLI" "install_argocd"
+  install_one_with_summary "Vault CLI" "install_vault"
+  install_one_with_summary "jq" "install_jq"
+  install_one_with_summary "git" "install_git"
+  install_one_with_summary "make" "install_make"
+  install_one_with_summary "K9s" "install_k9s"
+  install_one_with_summary "Helm" "install_helm"
+  install_one_with_summary "crictl" "install_crictl"
+  install_one_with_summary "yq" "install_yq"
+  install_one_with_summary "Kustomize" "install_kustomize"
+
+  echo
+  echo -e "${BOLD}${CYAN}Core Tools install summary${RESET}"
+  if [[ "${#INSTALL_OK[@]}" -gt 0 ]]; then
+    echo -e "${GREEN}Succeeded:${RESET} ${INSTALL_OK[*]}"
+  fi
+  if [[ "${#INSTALL_FAILED[@]}" -gt 0 ]]; then
+    echo -e "${RED}Failed:${RESET} ${INSTALL_FAILED[*]}"
+    echo -e "${YELLOW}Review log:${RESET} ${LOG_FILE}"
+  else
+    echo -e "${GREEN}All Core Tools installed successfully.${RESET}"
+  fi
+
+  verify_core_tools
+
+  if [[ "${#INSTALL_FAILED[@]}" -gt 0 ]]; then
+    return 1
+  fi
+}
+
+
 run_menu_action() {
   local label="$1"
   local func="$2"
@@ -1010,6 +1061,7 @@ print_menu() {
   echo -e "${YELLOW}How to use this menu:${RESET}"
   echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
   echo -e "  ${GREEN}•${RESET} Select option 1 to install the full DevOps toolbelt."
+  echo -e "  ${GREEN}•${RESET} Select option 24 to install only the Core Tools subset."
   echo -e "  ${GREEN}•${RESET} Select option 23 for multi-select, or type a list directly."
   echo -e "  ${GREEN}•${RESET} Multi-select examples: 2,5,7-10 or 11-14,22."
   echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
@@ -1019,6 +1071,7 @@ print_menu() {
   echo
 
   menu_row "1" "Install ALL tools" "Install every tool in category order"
+  menu_row "24" "Install Core Tools" "Install argocd vault jq git make k9s helm crictl yq kustomize"
 
   category_header "Kubernetes Core, Packaging & Manifest Tools"
   menu_row "2" "kubectl" "Official Kubernetes CLI"
@@ -1103,6 +1156,7 @@ run_menu_selection() {
     21) run_menu_action "Vault CLI" "install_vault" ;;
     22) verify_all ;;
     23) prompt_multi_select ;;
+    24) install_core_tools || true ;;
     0|q|Q|quit|exit)
       echo -e "${GREEN}Goodbye.${RESET}"
       exit 0
@@ -1204,7 +1258,7 @@ prompt_multi_select() {
 interactive_menu() {
   while true; do
     print_menu
-    read -r -p "Select an option [0-23 or list]: " choice
+    read -r -p "Select an option [0-24 or list]: " choice
     echo
 
     if [[ "${choice}" == *","* || "${choice}" =~ [0-9]+-[0-9]+ ]]; then
@@ -1220,11 +1274,15 @@ interactive_menu() {
 usage() {
   cat <<EOF
 Usage:
-  $0 [menu|all|verify|TOOL]
+  $0 [menu|all|core-tools|verify|TOOL]
 
 Interactive multi-select:
   In the menu, choose option 23 or type a list directly.
   Examples: 2,5,7-10 or 11-14,22
+
+Core Tools install subset:
+  core-tools
+  Installs: argocd vault jq git make k9s helm crictl yq kustomize
 
 Kubernetes Core, Packaging & Manifest Tools:
   kubectl
@@ -1261,6 +1319,7 @@ Secrets & Security:
 Examples:
   $0 menu
   $0 all
+  $0 core-tools
   $0 kubectl
   $0 kubectx-kubens
   $0 kubecolor
@@ -1285,6 +1344,7 @@ main() {
   case "${cmd}" in
     menu) interactive_menu ;;
     all|install) install_all ;;
+    core-tools|core|core-install) install_core_tools ;;
     verify) verify_all ;;
 
     kubectl) install_kubectl ;;

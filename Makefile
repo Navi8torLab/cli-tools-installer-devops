@@ -34,7 +34,7 @@ export KUBESPY_VERSION
 
 .DEFAULT_GOAL := help
 
-.PHONY: help chmod menu install all verify \
+.PHONY: help chmod menu install all core-tools verify \
 	kubectl kubeadm helm kustomize \
 	k9s tmux kubectx-kubens kubectx kubens kubie kubecolor \
 	stern crictl kubectl-tree \
@@ -118,6 +118,9 @@ install: all
 
 all: chmod
 	@$(SCRIPT) all
+
+core-tools: chmod
+	@$(SCRIPT) core-tools
 
 verify: chmod
 	@$(SCRIPT) verify

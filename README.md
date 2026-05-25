@@ -90,6 +90,7 @@ Purpose:
   terminal productivity.
 
  1) Install ALL tools        Install every tool in category order
+24) Install Core Tools       Install argocd vault jq git make k9s helm crictl yq kustomize
 
 Kubernetes Core, Packaging & Manifest Tools
  2) kubectl                  Official Kubernetes CLI
@@ -134,6 +135,12 @@ Secrets & Security
 make install
 ```
 
+Install only the Core Tools subset:
+
+```bash
+make core-tools
+```
+
 Or:
 
 ```bash
@@ -173,6 +180,41 @@ expands to:
 ```
 
 If option `1` is included in a multi-select list, the script runs the full install once and skips the remaining entries because option `1` already installs every tool.
+
+## Install Core Tools Only
+
+Use this option when you want only the original compact toolbelt:
+
+```text
+argocd
+vault
+jq
+git
+make
+k9s
+helm
+crictl
+yq
+kustomize
+```
+
+From the menu:
+
+```text
+24) Install Core Tools
+```
+
+From Make:
+
+```bash
+make core-tools
+```
+
+From the script:
+
+```bash
+./scripts/install-cli-tools.sh core-tools
+```
 
 ## Install One Tool or Category Item
 
