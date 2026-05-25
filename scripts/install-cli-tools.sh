@@ -992,6 +992,8 @@ print_menu() {
   echo -e "${YELLOW}How to use this menu:${RESET}"
   echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
   echo -e "  ${GREEN}•${RESET} Select option 1 to install the full DevOps toolbelt."
+  echo -e "  ${GREEN}•${RESET} Select option 23 for multi-select, or type a list directly."
+  echo -e "  ${GREEN}•${RESET} Multi-select examples: 2,5,7-10 or 11-14,22."
   echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
   echo -e "  ${GREEN}•${RESET} Use version override variables below when pinning releases."
   echo
@@ -1034,6 +1036,7 @@ print_menu() {
 
   echo
   menu_row "22" "Verify versions" "Show installed CLI versions by category"
+  menu_row "23" "Select multiple tools" "Install choices like 2,5,7-10"
   menu_row "0" "Quit" "Exit installer"
 
   echo
@@ -1055,43 +1058,142 @@ print_menu() {
   echo
 }
 
+run_menu_selection() {
+  local choice="$1"
+
+  case "${choice}" in
+    1) install_all || true ;;
+    2) run_menu_action "kubectl" "install_kubectl" ;;
+    3) run_menu_action "kubeadm" "install_kubeadm" ;;
+    4) run_menu_action "Helm" "install_helm" ;;
+    5) run_menu_action "Kustomize" "install_kustomize" ;;
+    6) run_menu_action "K9s" "install_k9s" ;;
+    7) run_menu_action "tmux" "install_tmux" ;;
+    8) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
+    9) run_menu_action "Kubie" "install_kubie" ;;
+    10) run_menu_action "Kubecolor" "install_kubecolor" ;;
+    11) run_menu_action "Stern" "install_stern" ;;
+    12) run_menu_action "crictl" "install_crictl" ;;
+    13) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
+    14) run_menu_action "kubespy" "install_kubespy" ;;
+    15) run_menu_action "Argo CD CLI" "install_argocd" ;;
+    16) run_menu_action "K8sGPT" "install_k8sgpt" ;;
+    17) run_menu_action "git" "install_git" ;;
+    18) run_menu_action "make" "install_make" ;;
+    19) run_menu_action "jq" "install_jq" ;;
+    20) run_menu_action "yq" "install_yq" ;;
+    21) run_menu_action "Vault CLI" "install_vault" ;;
+    22) verify_all ;;
+    23) prompt_multi_select ;;
+    0|q|Q|quit|exit)
+      echo -e "${GREEN}Goodbye.${RESET}"
+      exit 0
+      ;;
+    *)
+      warn "Invalid option: ${choice}"
+      ;;
+  esac
+}
+
+expand_multi_select() {
+  local raw="$1"
+  local compact token start end i
+  compact="$(echo "${raw}" | tr -d '[:space:]')"
+
+  if [[ -z "${compact}" ]]; then
+    return 0
+  fi
+
+  IFS=',' read -ra tokens <<< "${compact}"
+
+  for token in "${tokens[@]}"; do
+    [[ -z "${token}" ]] && continue
+
+    if [[ "${token}" =~ ^[0-9]+$ ]]; then
+      echo "${token}"
+    elif [[ "${token}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      start="${BASH_REMATCH[1]}"
+      end="${BASH_REMATCH[2]}"
+
+      if (( start > end )); then
+        warn "Skipping invalid descending range: ${token}"
+        continue
+      fi
+
+      for (( i=start; i<=end; i++ )); do
+        echo "${i}"
+      done
+    else
+      warn "Skipping invalid selection token: ${token}"
+    fi
+  done
+}
+
+run_multi_select() {
+  local raw="$1"
+  local -a expanded=()
+  local choice seen_all=0
+
+  mapfile -t expanded < <(expand_multi_select "${raw}")
+
+  if [[ "${#expanded[@]}" -eq 0 ]]; then
+    warn "No valid selections found. Example: 2,5,7-10"
+    return 0
+  fi
+
+  echo -e "${BOLD}${CYAN}Multi-select expanded to:${RESET} ${expanded[*]}"
+
+  for choice in "${expanded[@]}"; do
+    if [[ "${choice}" == "1" ]]; then
+      seen_all=1
+      break
+    fi
+  done
+
+  if [[ "${seen_all}" -eq 1 ]]; then
+    warn "Option 1 installs all tools. Running install-all once and skipping the remaining multi-select entries."
+    install_all || true
+    return 0
+  fi
+
+  for choice in "${expanded[@]}"; do
+    case "${choice}" in
+      0)
+        warn "Skipping option 0 inside multi-select. Use 0 by itself to quit."
+        ;;
+      23)
+        warn "Skipping option 23 inside multi-select to avoid recursion."
+        ;;
+      *)
+        run_menu_selection "${choice}"
+        ;;
+    esac
+  done
+}
+
+prompt_multi_select() {
+  local selections
+  echo -e "${BOLD}${CYAN}Multi-select mode${RESET}"
+  echo "Enter menu numbers separated by commas. Ranges are supported."
+  echo "Examples:"
+  echo "  2,5,7-10"
+  echo "  11-14,22"
+  echo
+  read -r -p "Enter selections: " selections
+  run_multi_select "${selections}"
+}
+
 interactive_menu() {
   while true; do
     print_menu
-    read -r -p "Select an option [0-22]: " choice
+    read -r -p "Select an option [0-23 or list]: " choice
     echo
 
-    case "${choice}" in
-      1) install_all || true ;;
-      2) run_menu_action "kubectl" "install_kubectl" ;;
-      3) run_menu_action "kubeadm" "install_kubeadm" ;;
-      4) run_menu_action "Helm" "install_helm" ;;
-      5) run_menu_action "Kustomize" "install_kustomize" ;;
-      6) run_menu_action "K9s" "install_k9s" ;;
-      7) run_menu_action "tmux" "install_tmux" ;;
-      8) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
-      9) run_menu_action "Kubie" "install_kubie" ;;
-      10) run_menu_action "Kubecolor" "install_kubecolor" ;;
-      11) run_menu_action "Stern" "install_stern" ;;
-      12) run_menu_action "crictl" "install_crictl" ;;
-      13) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
-      14) run_menu_action "kubespy" "install_kubespy" ;;
-      15) run_menu_action "Argo CD CLI" "install_argocd" ;;
-      16) run_menu_action "K8sGPT" "install_k8sgpt" ;;
-      17) run_menu_action "git" "install_git" ;;
-      18) run_menu_action "make" "install_make" ;;
-      19) run_menu_action "jq" "install_jq" ;;
-      20) run_menu_action "yq" "install_yq" ;;
-      21) run_menu_action "Vault CLI" "install_vault" ;;
-      22) verify_all ;;
-      0|q|Q|quit|exit)
-        echo -e "${GREEN}Goodbye.${RESET}"
-        exit 0
-        ;;
-      *)
-        warn "Invalid option: ${choice}"
-        ;;
-    esac
+    if [[ "${choice}" == *","* || "${choice}" =~ [0-9]+-[0-9]+ ]]; then
+      run_multi_select "${choice}"
+    else
+      run_menu_selection "${choice}"
+    fi
 
     pause_menu
   done
@@ -1101,6 +1203,10 @@ usage() {
   cat <<EOF
 Usage:
   $0 [menu|all|verify|TOOL]
+
+Interactive multi-select:
+  In the menu, choose option 23 or type a list directly.
+  Examples: 2,5,7-10 or 11-14,22
 
 Kubernetes Core, Packaging & Manifest Tools:
   kubectl

@@ -124,6 +124,7 @@ Secrets & Security
 21) Vault CLI                HashiCorp secrets management CLI
 
 22) Verify versions          Show installed CLI versions by category
+23) Select multiple tools     Install choices like 2,5,7-10
  0) Quit                     Exit installer
 ```
 
@@ -144,6 +145,34 @@ The install-all option installs each tool independently. If one tool fails, the 
 ```text
 /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 ```
+
+## Multi-Select Install
+
+From the TUI menu, choose option `23` and enter comma-separated selections or ranges:
+
+```text
+2,5,7-10
+```
+
+You can also type the same list directly at the main prompt:
+
+```text
+Select an option [0-23 or list]: 2,5,7-10
+```
+
+Ranges expand from left to right. For example:
+
+```text
+7-10
+```
+
+expands to:
+
+```text
+7 8 9 10
+```
+
+If option `1` is included in a multi-select list, the script runs the full install once and skips the remaining entries because option `1` already installs every tool.
 
 ## Install One Tool or Category Item
 
