@@ -1,4 +1,4 @@
-# Ubuntu 22.04 - 26.04 LTS - 26.04 LTS DevOps & Kubernetes Toolbelt Installer
+# Ubuntu 22.04 - 26.04 LTS DevOps & Kubernetes Toolbelt Installer
 
 Build a workstation or bastion host with categorized CLI tools for Kubernetes operations, GitOps deployments, secrets management, runtime debugging, observability, and workflow automation.
 
@@ -276,6 +276,17 @@ make install
 ```
 
 ## Troubleshooting
+
+### Verify exit 141 fix
+
+This bundle avoids piping CLI version output directly into `head -n 1` while `pipefail` is enabled. Some tools print multiple lines and can trigger a harmless SIGPIPE that appears as:
+
+```text
+make: *** [Makefile:123: verify] Error 141
+```
+
+The verify logic now captures version output first, then prints the first non-empty line safely.
+
 
 ### Kubecolor parser fix
 

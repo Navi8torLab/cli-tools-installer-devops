@@ -150,7 +150,7 @@ extract_first_release_asset_url() {
     | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' \
     | grep -Ei "${include_regex}" \
     | grep -Evi "${exclude_regex}" \
-    | head -n 1
+    | awk 'NR==1 {print; exit}'
 }
 
 extract_release_asset_url_awk() {
@@ -223,7 +223,7 @@ install_from_tarball_find_binary() {
   run curl -fL --retry 3 --retry-delay 2 -o "${archive}" "${url}"
   run tar -xzf "${archive}" -C "${tmpdir}"
 
-  extracted_binary="$(find "${tmpdir}" -type f -name "${binary_name}" | head -n 1 || true)"
+  extracted_binary="$(find "${tmpdir}" -type f -name "${binary_name}" | awk 'NR==1 {print; exit}' || true)"
   [[ -n "${extracted_binary}" ]] || {
     rm -rf "${tmpdir}"
     die "${binary_name} binary was not found after extracting ${archive_name}"
@@ -446,7 +446,7 @@ install_kubie() {
       ;;
   esac
 
-  binary="$(find "${tmpdir}" -type f \( -name "kubie" -o -name "kubie-linux-*" -o -name "kubie_*" \) | head -n 1 || true)"
+  binary="$(find "${tmpdir}" -type f \( -name "kubie" -o -name "kubie-linux-*" -o -name "kubie_*" \) | awk 'NR==1 {print; exit}' || true)"
   [[ -n "${binary}" ]] || {
     rm -rf "${tmpdir}"
     die "Kubie binary was not found in release asset ${asset}"
@@ -502,7 +502,7 @@ install_kubecolor() {
       ;;
     *.tar.gz|*.tgz)
       run tar -xzf "${download_path}" -C "${tmpdir}"
-      binary="$(find "${tmpdir}" -type f -name "kubecolor" | head -n 1 || true)"
+      binary="$(find "${tmpdir}" -type f -name "kubecolor" | awk 'NR==1 {print; exit}' || true)"
       [[ -n "${binary}" ]] || {
         rm -rf "${tmpdir}"
         die "kubecolor binary was not found after extracting ${asset}"
@@ -751,16 +751,16 @@ version_of() {
       kustomize version 2>/dev/null || true
       ;;
     k9s)
-      k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true
+      k9s version --short 2>/dev/null || k9s version 2>/dev/null | awk 'NR<=5 {print}' || true
       ;;
     tmux)
       tmux -V 2>/dev/null || true
       ;;
     kubectx)
-      kubectx --help 2>/dev/null | head -n 1 || echo "installed"
+      kubectx --help 2>/dev/null | awk 'NR==1 {print; exit}' || echo "installed"
       ;;
     kubens)
-      kubens --help 2>/dev/null | head -n 1 || echo "installed"
+      kubens --help 2>/dev/null | awk 'NR==1 {print; exit}' || echo "installed"
       ;;
     kubie)
       kubie --version 2>/dev/null || true
@@ -769,7 +769,7 @@ version_of() {
       kubecolor --version 2>/dev/null || kubecolor version 2>/dev/null || echo "installed"
       ;;
     kubectl-tree)
-      kubectl-tree --help 2>/dev/null | head -n 1 || echo "installed"
+      kubectl-tree --help 2>/dev/null | awk 'NR==1 {print; exit}' || echo "installed"
       ;;
     stern)
       stern --version 2>/dev/null || true
@@ -787,7 +787,7 @@ version_of() {
       git --version 2>/dev/null || true
       ;;
     make)
-      make --version 2>/dev/null | head -n 1 || true
+      make --version 2>/dev/null | awk 'NR==1 {print; exit}' || true
       ;;
     jq)
       jq --version 2>/dev/null || true
@@ -807,11 +807,28 @@ version_of() {
   esac
 }
 
+first_line() {
+  # Avoid piping command output directly into `head` while pipefail is enabled.
+  # Some CLIs print multiple lines and can trigger SIGPIPE/exit 141 when head exits early.
+  awk 'NF { print; exit }'
+}
+
 verify_tool() {
   local tool="$1"
+  local output=""
+
   if command -v "${tool}" >/dev/null 2>&1; then
     printf "%-14s " "${tool}"
-    version_of "${tool}" | head -n 1
+
+    set +e
+    output="$(version_of "${tool}" 2>/dev/null)"
+    set -e
+
+    if [[ -n "${output}" ]]; then
+      printf "%s\n" "${output}" | first_line
+    else
+      echo "installed"
+    fi
   else
     printf "%-14s %b\n" "${tool}" "${RED}missing${RESET}"
   fi
