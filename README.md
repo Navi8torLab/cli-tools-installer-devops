@@ -89,101 +89,49 @@ Purpose:
   YAML/JSON processing, container runtime troubleshooting, and
   terminal productivity.
 
- 1) Install ALL tools        Install every tool in category order
-24) Install Core Tools       Install argocd vault jq git make k9s helm crictl yq kustomize
+ 1) Install Core Tools       Install argocd vault jq git make k9s helm crictl yq kustomize
+ 2) Install ALL Tools        Install every tool in category order
 
 Kubernetes Core, Packaging & Manifest Tools
- 2) kubectl                  Official Kubernetes CLI
- 3) kubeadm                  Kubernetes cluster bootstrap CLI
- 4) Helm                     Kubernetes package manager
- 5) Kustomize                Kubernetes YAML overlay manager
+ 3) kubectl                  Official Kubernetes CLI
+ 4) kubeadm                  Kubernetes cluster bootstrap CLI
+ 5) Helm                     Kubernetes package manager
+ 6) Kustomize                Kubernetes YAML overlay manager
 
 Cluster Navigation, Inspection & Efficiency
- 6) K9s                      Terminal UI for Kubernetes
- 7) tmux                     Persistent terminal multiplexer
- 8) kubectx & kubens         Switch kube contexts and namespaces
- 9) Kubie                    Isolated kube context shells
-10) Kubecolor                Colorized kubectl output wrapper
+ 7) K9s                      Terminal UI for Kubernetes
+ 8) tmux                     Persistent terminal multiplexer
+ 9) kubectx & kubens         Switch kube contexts and namespaces
+10) Kubie                    Isolated kube context shells
+11) Kubecolor                Colorized kubectl output wrapper
 
 Debugging & Observability
-11) Stern                    Multi-pod log tailing
-12) crictl                   Container runtime CRI debug CLI
-13) kubectl tree             Show Kubernetes ownership trees
-14) kubespy                  Watch Kubernetes resource changes
+12) Stern                    Multi-pod log tailing
+13) crictl                   Container runtime CRI debug CLI
+14) kubectl tree             Show Kubernetes ownership trees
+15) kubespy                  Watch Kubernetes resource changes
 
 GitOps & Operational Diagnostics
-15) Argo CD CLI              GitOps continuous delivery CLI
-16) K8sGPT                   AI-assisted Kubernetes diagnostics
+16) Argo CD CLI              GitOps continuous delivery CLI
+17) K8sGPT                   AI-assisted Kubernetes diagnostics
 
 Workflow Automation & Source Control
-17) git                      Source control client
-18) make                     Task runner/build automation
-19) jq                       JSON query and formatting tool
-20) yq                       YAML/JSON processor
+18) git                      Source control client
+19) make                     Task runner/build automation
+20) jq                       JSON query and formatting tool
+21) yq                       YAML/JSON processor
 
 Secrets & Security
-21) Vault CLI                HashiCorp secrets management CLI
+22) Vault CLI                HashiCorp secrets management CLI
 
-22) Verify versions          Show installed CLI versions by category
-23) Select multiple tools     Install choices like 2,5,7-10
+23) Verify versions          Show installed CLI versions by category
+24) Select multiple tools    Install choices like 3,6,8-11
  0) Quit                     Exit installer
 ```
 
-## Install Everything
-
-```bash
-make install
-```
-
-Install only the Core Tools subset:
-
-```bash
-make core-tools
-```
-
-Or:
-
-```bash
-./scripts/install-cli-tools.sh all
-```
-
-The install-all option installs each tool independently. If one tool fails, the script keeps going, prints a final summary, and writes a log file under `/tmp`, for example:
-
-```text
-/tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
-```
-
-## Multi-Select Install
-
-From the TUI menu, choose option `23` and enter comma-separated selections or ranges:
-
-```text
-2,5,7-10
-```
-
-You can also type the same list directly at the main prompt:
-
-```text
-Select an option [0-23 or list]: 2,5,7-10
-```
-
-Ranges expand from left to right. For example:
-
-```text
-7-10
-```
-
-expands to:
-
-```text
-7 8 9 10
-```
-
-If option `1` is included in a multi-select list, the script runs the full install once and skips the remaining entries because option `1` already installs every tool.
-
 ## Install Core Tools Only
 
-Use this option when you want only the original compact toolbelt:
+Use this option when you want only the compact toolbelt:
 
 ```text
 argocd
@@ -201,7 +149,7 @@ kustomize
 From the menu:
 
 ```text
-24) Install Core Tools
+1) Install Core Tools
 ```
 
 From Make:
@@ -215,6 +163,54 @@ From the script:
 ```bash
 ./scripts/install-cli-tools.sh core-tools
 ```
+
+## Install Everything
+
+```bash
+make install
+```
+
+Or:
+
+```bash
+./scripts/install-cli-tools.sh all
+```
+
+The install-all option installs each tool independently. If one tool fails, the script keeps going, prints a final summary, and writes a log file under `/tmp`, for example:
+
+```text
+/tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
+```
+
+## Multi-Select Install
+
+From the TUI menu, choose option `24` and enter comma-separated selections or ranges:
+
+```text
+3,6,8-11
+```
+
+You can also type the same list directly at the main prompt:
+
+```text
+Select an option [0-24 or list]: 3,6,8-11
+```
+
+Ranges expand from left to right. For example:
+
+```text
+8-11
+```
+
+expands to:
+
+```text
+8 9 10 11
+```
+
+If option `2` is included in a multi-select list, the script runs the full install once and skips the remaining entries because option `2` already installs every tool.
+
+If option `1` is included in a multi-select list, the script runs the Core Tools install once and skips the duplicate option `1`.
 
 ## Install One Tool or Category Item
 

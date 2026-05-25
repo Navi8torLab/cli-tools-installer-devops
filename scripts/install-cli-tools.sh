@@ -145,12 +145,19 @@ extract_first_release_asset_url() {
   local json_file="$1"
   local include_regex="$2"
   local exclude_regex="${3:-(__never_match__)}"
+  local url=""
 
-  grep '"browser_download_url":' "${json_file}" \
-    | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' \
-    | grep -Ei "${include_regex}" \
-    | grep -Evi "${exclude_regex}" \
-    | awk 'NR==1 {print; exit}'
+  while IFS= read -r url; do
+    url="${url#*\"browser_download_url\": \"}"
+    url="${url%%\"*}"
+
+    if [[ "${url}" =~ ${include_regex} ]] && [[ ! "${url}" =~ ${exclude_regex} ]]; then
+      printf '%s\n' "${url}"
+      return 0
+    fi
+  done < <(grep '"browser_download_url":' "${json_file}" || true)
+
+  return 0
 }
 
 extract_release_asset_url_awk() {
@@ -1029,6 +1036,12 @@ run_menu_action() {
 }
 
 # ---------- TUI ----------
+# Menu numbering contract:
+#   1  = Core Tools subset
+#   2  = All tools
+#   3+ = Individual tools in category order
+#   23 = Verify
+#   24 = Multi-select
 menu_row() {
   local number="$1"
   local label="$2"
@@ -1060,54 +1073,54 @@ print_menu() {
   echo
   echo -e "${YELLOW}How to use this menu:${RESET}"
   echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
-  echo -e "  ${GREEN}•${RESET} Select option 1 to install the full DevOps toolbelt."
-  echo -e "  ${GREEN}•${RESET} Select option 24 to install only the Core Tools subset."
-  echo -e "  ${GREEN}•${RESET} Select option 23 for multi-select, or type a list directly."
-  echo -e "  ${GREEN}•${RESET} Multi-select examples: 2,5,7-10 or 11-14,22."
+  echo -e "  ${GREEN}•${RESET} Select option 1 to install only the Core Tools subset."
+  echo -e "  ${GREEN}•${RESET} Select option 2 to install the full DevOps toolbelt."
+  echo -e "  ${GREEN}•${RESET} Select option 24 for multi-select, or type a list directly."
+  echo -e "  ${GREEN}•${RESET} Multi-select examples: 3,6,8-11 or 12-15,23."
   echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
   echo -e "  ${GREEN}•${RESET} Use version override variables below when pinning releases."
   echo
   echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
   echo
 
-  menu_row "1" "Install ALL tools" "Install every tool in category order"
-  menu_row "24" "Install Core Tools" "Install argocd vault jq git make k9s helm crictl yq kustomize"
+  menu_row "1" "Install Core Tools" "Install argocd vault jq git make k9s helm crictl yq kustomize"
+  menu_row "2" "Install ALL Tools" "Install every tool in category order"
 
   category_header "Kubernetes Core, Packaging & Manifest Tools"
-  menu_row "2" "kubectl" "Official Kubernetes CLI"
-  menu_row "3" "kubeadm" "Kubernetes cluster bootstrap CLI"
-  menu_row "4" "Helm" "Kubernetes package manager"
-  menu_row "5" "Kustomize" "Kubernetes YAML overlay manager"
+  menu_row "3" "kubectl" "Official Kubernetes CLI"
+  menu_row "4" "kubeadm" "Kubernetes cluster bootstrap CLI"
+  menu_row "5" "Helm" "Kubernetes package manager"
+  menu_row "6" "Kustomize" "Kubernetes YAML overlay manager"
 
   category_header "Cluster Navigation, Inspection & Efficiency"
-  menu_row "6" "K9s" "Terminal UI for Kubernetes"
-  menu_row "7" "tmux" "Persistent terminal multiplexer"
-  menu_row "8" "kubectx & kubens" "Switch kube contexts and namespaces"
-  menu_row "9" "Kubie" "Isolated kube context shells"
-  menu_row "10" "Kubecolor" "Colorized kubectl output wrapper"
+  menu_row "7" "K9s" "Terminal UI for Kubernetes"
+  menu_row "8" "tmux" "Persistent terminal multiplexer"
+  menu_row "9" "kubectx & kubens" "Switch kube contexts and namespaces"
+  menu_row "10" "Kubie" "Isolated kube context shells"
+  menu_row "11" "Kubecolor" "Colorized kubectl output wrapper"
 
   category_header "Debugging & Observability"
-  menu_row "11" "Stern" "Multi-pod log tailing"
-  menu_row "12" "crictl" "Container runtime CRI debug CLI"
-  menu_row "13" "kubectl tree" "Show Kubernetes ownership trees"
-  menu_row "14" "kubespy" "Watch Kubernetes resource changes"
+  menu_row "12" "Stern" "Multi-pod log tailing"
+  menu_row "13" "crictl" "Container runtime CRI debug CLI"
+  menu_row "14" "kubectl tree" "Show Kubernetes ownership trees"
+  menu_row "15" "kubespy" "Watch Kubernetes resource changes"
 
   category_header "GitOps & Operational Diagnostics"
-  menu_row "15" "Argo CD CLI" "GitOps continuous delivery CLI"
-  menu_row "16" "K8sGPT" "AI-assisted Kubernetes diagnostics"
+  menu_row "16" "Argo CD CLI" "GitOps continuous delivery CLI"
+  menu_row "17" "K8sGPT" "AI-assisted Kubernetes diagnostics"
 
   category_header "Workflow Automation & Source Control"
-  menu_row "17" "git" "Source control client"
-  menu_row "18" "make" "Task runner/build automation"
-  menu_row "19" "jq" "JSON query and formatting tool"
-  menu_row "20" "yq" "YAML/JSON processor"
+  menu_row "18" "git" "Source control client"
+  menu_row "19" "make" "Task runner/build automation"
+  menu_row "20" "jq" "JSON query and formatting tool"
+  menu_row "21" "yq" "YAML/JSON processor"
 
   category_header "Secrets & Security"
-  menu_row "21" "Vault CLI" "HashiCorp secrets management CLI"
+  menu_row "22" "Vault CLI" "HashiCorp secrets management CLI"
 
   echo
-  menu_row "22" "Verify versions" "Show installed CLI versions by category"
-  menu_row "23" "Select multiple tools" "Install choices like 2,5,7-10"
+  menu_row "23" "Verify versions" "Show installed CLI versions by category"
+  menu_row "24" "Select multiple tools" "Install choices like 3,6,8-11"
   menu_row "0" "Quit" "Exit installer"
 
   echo
@@ -1133,30 +1146,30 @@ run_menu_selection() {
   local choice="$1"
 
   case "${choice}" in
-    1) install_all || true ;;
-    2) run_menu_action "kubectl" "install_kubectl" ;;
-    3) run_menu_action "kubeadm" "install_kubeadm" ;;
-    4) run_menu_action "Helm" "install_helm" ;;
-    5) run_menu_action "Kustomize" "install_kustomize" ;;
-    6) run_menu_action "K9s" "install_k9s" ;;
-    7) run_menu_action "tmux" "install_tmux" ;;
-    8) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
-    9) run_menu_action "Kubie" "install_kubie" ;;
-    10) run_menu_action "Kubecolor" "install_kubecolor" ;;
-    11) run_menu_action "Stern" "install_stern" ;;
-    12) run_menu_action "crictl" "install_crictl" ;;
-    13) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
-    14) run_menu_action "kubespy" "install_kubespy" ;;
-    15) run_menu_action "Argo CD CLI" "install_argocd" ;;
-    16) run_menu_action "K8sGPT" "install_k8sgpt" ;;
-    17) run_menu_action "git" "install_git" ;;
-    18) run_menu_action "make" "install_make" ;;
-    19) run_menu_action "jq" "install_jq" ;;
-    20) run_menu_action "yq" "install_yq" ;;
-    21) run_menu_action "Vault CLI" "install_vault" ;;
-    22) verify_all ;;
-    23) prompt_multi_select ;;
-    24) install_core_tools || true ;;
+    1) install_core_tools || true ;;
+    2) install_all || true ;;
+    3) run_menu_action "kubectl" "install_kubectl" ;;
+    4) run_menu_action "kubeadm" "install_kubeadm" ;;
+    5) run_menu_action "Helm" "install_helm" ;;
+    6) run_menu_action "Kustomize" "install_kustomize" ;;
+    7) run_menu_action "K9s" "install_k9s" ;;
+    8) run_menu_action "tmux" "install_tmux" ;;
+    9) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
+    10) run_menu_action "Kubie" "install_kubie" ;;
+    11) run_menu_action "Kubecolor" "install_kubecolor" ;;
+    12) run_menu_action "Stern" "install_stern" ;;
+    13) run_menu_action "crictl" "install_crictl" ;;
+    14) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
+    15) run_menu_action "kubespy" "install_kubespy" ;;
+    16) run_menu_action "Argo CD CLI" "install_argocd" ;;
+    17) run_menu_action "K8sGPT" "install_k8sgpt" ;;
+    18) run_menu_action "git" "install_git" ;;
+    19) run_menu_action "make" "install_make" ;;
+    20) run_menu_action "jq" "install_jq" ;;
+    21) run_menu_action "yq" "install_yq" ;;
+    22) run_menu_action "Vault CLI" "install_vault" ;;
+    23) verify_all ;;
+    24) prompt_multi_select ;;
     0|q|Q|quit|exit)
       echo -e "${GREEN}Goodbye.${RESET}"
       exit 0
@@ -1204,28 +1217,36 @@ expand_multi_select() {
 run_multi_select() {
   local raw="$1"
   local -a expanded=()
-  local choice seen_all=0
+  local choice seen_all=0 seen_core=0
 
   mapfile -t expanded < <(expand_multi_select "${raw}")
 
   if [[ "${#expanded[@]}" -eq 0 ]]; then
-    warn "No valid selections found. Example: 2,5,7-10"
+    warn "No valid selections found. Example: 3,6,8-11"
     return 0
   fi
 
   echo -e "${BOLD}${CYAN}Multi-select expanded to:${RESET} ${expanded[*]}"
 
   for choice in "${expanded[@]}"; do
-    if [[ "${choice}" == "1" ]]; then
+    if [[ "${choice}" == "2" ]]; then
       seen_all=1
       break
+    fi
+    if [[ "${choice}" == "1" ]]; then
+      seen_core=1
     fi
   done
 
   if [[ "${seen_all}" -eq 1 ]]; then
-    warn "Option 1 installs all tools. Running install-all once and skipping the remaining multi-select entries."
+    warn "Option 2 installs all tools. Running install-all once and skipping the remaining multi-select entries."
     install_all || true
     return 0
+  fi
+
+  if [[ "${seen_core}" -eq 1 ]]; then
+    warn "Option 1 installs the Core Tools subset. Running core-tools once and skipping duplicate Core Tools entries."
+    install_core_tools || true
   fi
 
   for choice in "${expanded[@]}"; do
@@ -1233,8 +1254,10 @@ run_multi_select() {
       0)
         warn "Skipping option 0 inside multi-select. Use 0 by itself to quit."
         ;;
-      23)
-        warn "Skipping option 23 inside multi-select to avoid recursion."
+      1)
+        ;;
+      24)
+        warn "Skipping option 24 inside multi-select to avoid recursion."
         ;;
       *)
         run_menu_selection "${choice}"
@@ -1248,8 +1271,8 @@ prompt_multi_select() {
   echo -e "${BOLD}${CYAN}Multi-select mode${RESET}"
   echo "Enter menu numbers separated by commas. Ranges are supported."
   echo "Examples:"
-  echo "  2,5,7-10"
-  echo "  11-14,22"
+  echo "  3,6,8-11"
+  echo "  12-15,23"
   echo
   read -r -p "Enter selections: " selections
   run_multi_select "${selections}"
@@ -1277,8 +1300,8 @@ Usage:
   $0 [menu|all|core-tools|verify|TOOL]
 
 Interactive multi-select:
-  In the menu, choose option 23 or type a list directly.
-  Examples: 2,5,7-10 or 11-14,22
+  In the menu, choose option 24 or type a list directly.
+  Examples: 3,6,8-11 or 12-15,23
 
 Core Tools install subset:
   core-tools
@@ -1318,8 +1341,8 @@ Secrets & Security:
 
 Examples:
   $0 menu
-  $0 all
   $0 core-tools
+  $0 all
   $0 kubectl
   $0 kubectx-kubens
   $0 kubecolor

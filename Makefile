@@ -49,9 +49,11 @@ help:
 	@echo
 	@echo "Interactive:"
 	@echo "  make menu"
+	@echo "  In the menu, choose option 24 or type a list such as: 3,6,8-11"
 	@echo
-	@echo "Install all:"
-	@echo "  make install"
+	@echo "Install options:"
+	@echo "  make core-tools       # argocd vault jq git make k9s helm crictl yq kustomize"
+	@echo "  make install          # install every tool"
 	@echo
 	@echo "Kubernetes Core, Packaging & Manifest Tools:"
 	@echo "  make kubectl          # Official Kubernetes CLI"
