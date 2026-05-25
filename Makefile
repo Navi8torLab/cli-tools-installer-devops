@@ -23,8 +23,10 @@ export KUSTOMIZE_VERSION
 .PHONY: help chmod menu install all argocd vault jq git make make-tool tmux k9s helm crictl yq kustomize verify bootstrap
 
 help:
-	@echo "Ubuntu 22.04 DevOps Toolbelt Installer"
-	@echo "DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure."
+	@echo "Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer"
+	@echo "Build a workstation or bastion host with CLI tools for Kubernetes operations,"
+	@echo "GitOps deployments, secrets management, YAML/JSON processing, runtime debugging,"
+	@echo "and terminal productivity."
 	@echo
 	@echo "Interactive:"
 	@echo "  make menu"

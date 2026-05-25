@@ -1,6 +1,6 @@
-# Ubuntu 22.04 DevOps Toolbelt Installer
+# Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
 
-DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.
+Build a workstation or bastion host with common CLI tools used for Kubernetes operations, GitOps deployments, secrets management, YAML/JSON processing, container runtime troubleshooting, and terminal productivity.
 
 ## Tool list
 
@@ -43,6 +43,22 @@ make menu
 Menu layout:
 
 ```text
+====================================================================
+ Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
+====================================================================
+
+Purpose:
+  Build a workstation or bastion host with common CLI tools used for
+  Kubernetes operations, GitOps deployments, secrets management,
+  YAML/JSON processing, container runtime troubleshooting, and
+  terminal productivity.
+
+How to use this menu:
+  • Select one tool to install it individually.
+  • Select option 1 to install the full DevOps toolbelt.
+  • Select Verify versions after installation.
+  • Use the version override variables below when pinning releases.
+
  1) Install ALL tools        Install every CLI listed below
  2) Argo CD CLI              GitOps continuous delivery CLI
  3) Vault CLI                HashiCorp secrets management CLI

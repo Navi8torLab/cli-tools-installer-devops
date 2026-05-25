@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Ubuntu 22.04 DevOps Toolbelt Installer
-# DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.
+# Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
+# Build a workstation or bastion host with common CLI tools used for Kubernetes operations,
+# GitOps deployments, secrets management, YAML/JSON processing, container runtime troubleshooting,
+# and terminal productivity.
 
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
@@ -487,8 +489,22 @@ print_menu() {
     clear || true
   fi
 
-  echo -e "${BOLD}${CYAN}Ubuntu 22.04 DevOps Toolbelt Installer${RESET}"
-  echo -e "${YELLOW}DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-native infrastructure.${RESET}"
+  echo -e "${BOLD}${CYAN}====================================================================${RESET}"
+  echo -e "${BOLD}${CYAN} Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer${RESET}"
+  echo -e "${BOLD}${CYAN}====================================================================${RESET}"
+  echo
+  echo -e "${YELLOW}Purpose:${RESET}"
+  echo -e "  Build a workstation or bastion host with common CLI tools used for"
+  echo -e "  Kubernetes operations, GitOps deployments, secrets management,"
+  echo -e "  YAML/JSON processing, container runtime troubleshooting, and"
+  echo -e "  terminal productivity."
+  echo
+  echo -e "${YELLOW}How to use this menu:${RESET}"
+  echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
+  echo -e "  ${GREEN}•${RESET} Select option 1 to install the full DevOps toolbelt."
+  echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
+  echo -e "  ${GREEN}•${RESET} Use the version override variables below when pinning releases."
+  echo
   echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
   echo
   menu_row "1"  "Install ALL tools"    "Install every CLI listed below"
