@@ -1,46 +1,82 @@
 # Ubuntu 22.04 DevOps & Kubernetes Toolbelt Installer
 
-Build a workstation or bastion host with common CLI tools used for Kubernetes operations, GitOps deployments, secrets management, YAML/JSON processing, container runtime troubleshooting, and terminal productivity.
+Build a workstation or bastion host with categorized CLI tools for Kubernetes operations, GitOps deployments, secrets management, runtime debugging, observability, and workflow automation.
 
-## Tool list
+## Tool Categories
+
+### Kubernetes Core, Packaging & Manifest Tools
 
 | Tool | Description |
 |---|---|
-| `argocd` | GitOps continuous delivery CLI for Argo CD |
-| `vault` | HashiCorp secrets management CLI |
-| `jq` | JSON query and formatting tool |
+| `kubectl` | Official Kubernetes CLI for interacting with clusters |
+| `kubeadm` | Kubernetes cluster bootstrap and lifecycle CLI |
+| `helm` | Kubernetes package manager for Helm charts |
+| `kustomize` | Kubernetes YAML overlay and patch manager |
+
+### Cluster Navigation, Inspection & Efficiency
+
+| Tool | Description |
+|---|---|
+| `k9s` | Terminal UI for Kubernetes cluster operations |
+| `tmux` | Persistent terminal multiplexer for long-running shell sessions |
+| `kubectx` / `kubens` | Fast switching between Kubernetes contexts and namespaces |
+| `kubie` | Isolated Kubernetes context and namespace shells |
+| `kubecolor` | Colorized wrapper for kubectl output |
+
+### Debugging & Observability
+
+| Tool | Description |
+|---|---|
+| `stern` | Tail logs from multiple Kubernetes pods and containers |
+| `crictl` | Debug CRI-compatible container runtimes such as containerd |
+| `kubectl-tree` | Kubectl plugin that shows Kubernetes ownerReference trees |
+| `kubespy` | Watch Kubernetes resource changes in real time |
+
+### GitOps & Operational Diagnostics
+
+| Tool | Description |
+|---|---|
+| `argocd` | Argo CD GitOps continuous delivery CLI |
+| `k8sgpt` | AI-assisted Kubernetes diagnostics and issue analysis |
+
+### Workflow Automation & Source Control
+
+| Tool | Description |
+|---|---|
 | `git` | Source control client |
 | `make` | Task runner and build automation tool |
-| `tmux` | Persistent terminal multiplexer for long-running shell sessions |
-| `k9s` | Terminal UI for Kubernetes cluster operations |
-| `helm` | Kubernetes package manager for Helm charts |
-| `crictl` | CLI for debugging CRI-compatible container runtimes such as containerd |
+| `jq` | JSON query and formatting tool |
 | `yq` | YAML/JSON processor |
-| `kustomize` | Kubernetes YAML overlay and patch manager |
+
+### Secrets & Security
+
+| Tool | Description |
+|---|---|
+| `vault` | HashiCorp Vault secrets management CLI |
 
 ## Files
 
 ```text
-cli-tools-installer-devops-toolbelt-tmux-kustomize/
+devops-kubernetes-toolbelt-recategorized/
 ├── Makefile
 └── scripts/
     └── install-cli-tools.sh
 ```
 
-## Interactive colored TUI menu
+## Interactive TUI
 
 ```bash
 chmod +x scripts/install-cli-tools.sh
 ./scripts/install-cli-tools.sh
 ```
 
-Or with Make:
+Or:
 
 ```bash
 make menu
 ```
 
-Menu layout:
+## Menu Layout
 
 ```text
 ====================================================================
@@ -53,79 +89,99 @@ Purpose:
   YAML/JSON processing, container runtime troubleshooting, and
   terminal productivity.
 
-How to use this menu:
-  • Select one tool to install it individually.
-  • Select option 1 to install the full DevOps toolbelt.
-  • Select Verify versions after installation.
-  • Use the version override variables below when pinning releases.
+ 1) Install ALL tools        Install every tool in category order
 
- 1) Install ALL tools        Install every CLI listed below
- 2) Argo CD CLI              GitOps continuous delivery CLI
- 3) Vault CLI                HashiCorp secrets management CLI
- 4) jq                       JSON query and formatting tool
- 5) git                      Source control client
- 6) make                     Task runner/build automation
+Kubernetes Core, Packaging & Manifest Tools
+ 2) kubectl                  Official Kubernetes CLI
+ 3) kubeadm                  Kubernetes cluster bootstrap CLI
+ 4) Helm                     Kubernetes package manager
+ 5) Kustomize                Kubernetes YAML overlay manager
+
+Cluster Navigation, Inspection & Efficiency
+ 6) K9s                      Terminal UI for Kubernetes
  7) tmux                     Persistent terminal multiplexer
- 8) k9s                      Terminal UI for Kubernetes
- 9) Helm CLI                 Kubernetes package manager
-10) crictl                   Container runtime CRI debug CLI
-11) yq                       YAML/JSON processor
-12) Kustomize                Kubernetes YAML overlay manager
-13) Verify versions          Show installed CLI versions
+ 8) kubectx & kubens         Switch kube contexts and namespaces
+ 9) Kubie                    Isolated kube context shells
+10) Kubecolor                Colorized kubectl output wrapper
+
+Debugging & Observability
+11) Stern                    Multi-pod log tailing
+12) crictl                   Container runtime CRI debug CLI
+13) kubectl tree             Show Kubernetes ownership trees
+14) kubespy                  Watch Kubernetes resource changes
+
+GitOps & Operational Diagnostics
+15) Argo CD CLI              GitOps continuous delivery CLI
+16) K8sGPT                   AI-assisted Kubernetes diagnostics
+
+Workflow Automation & Source Control
+17) git                      Source control client
+18) make                     Task runner/build automation
+19) jq                       JSON query and formatting tool
+20) yq                       YAML/JSON processor
+
+Secrets & Security
+21) Vault CLI                HashiCorp secrets management CLI
+
+22) Verify versions          Show installed CLI versions by category
  0) Quit                     Exit installer
 ```
 
-## Install everything
+## Install Everything
 
 ```bash
 make install
 ```
 
-Equivalent direct script command:
+Or:
 
 ```bash
 ./scripts/install-cli-tools.sh all
 ```
 
-The install-all option now installs each tool independently. If one tool fails, the script keeps going, prints a final install summary, and writes a log file under `/tmp`, for example:
+The install-all option installs each tool independently. If one tool fails, the script keeps going, prints a final summary, and writes a log file under `/tmp`, for example:
 
 ```text
 /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 ```
 
-## Install one tool at a time
+## Install One Tool or Category Item
 
 ```bash
+# Kubernetes Core, Packaging & Manifest Tools
+make kubectl
+make kubeadm
+make helm
+make kustomize
+
+# Cluster Navigation, Inspection & Efficiency
+make k9s
+make tmux
+make kubectx-kubens
+make kubie
+make kubecolor
+
+# Debugging & Observability
+make stern
+make crictl
+make kubectl-tree
+make kubespy
+
+# GitOps & Operational Diagnostics
 make argocd
-make vault
-make jq
+make k8sgpt
+
+# Workflow Automation & Source Control
 make git
 make make-tool
-make tmux
-make k9s
-make helm
-make crictl
+make jq
 make yq
-make kustomize
+
+# Secrets & Security
+make vault
 ```
 
-Equivalent direct script commands:
-
-```bash
-./scripts/install-cli-tools.sh argocd
-./scripts/install-cli-tools.sh vault
-./scripts/install-cli-tools.sh jq
-./scripts/install-cli-tools.sh git
-./scripts/install-cli-tools.sh make
-./scripts/install-cli-tools.sh tmux
-./scripts/install-cli-tools.sh k9s
-./scripts/install-cli-tools.sh helm
-./scripts/install-cli-tools.sh crictl
-./scripts/install-cli-tools.sh yq
-./scripts/install-cli-tools.sh kustomize
-```
-
-## Verify installed tools
+## Verify Installed Tools
 
 ```bash
 make verify
@@ -137,57 +193,45 @@ Or:
 ./scripts/install-cli-tools.sh verify
 ```
 
-## Version overrides
-
-Install a specific Argo CD CLI version:
+## Version Overrides
 
 ```bash
-make argocd ARGOCD_VERSION=v3.2.0
-```
-
-Install a specific k9s version:
-
-```bash
-make k9s K9S_VERSION=v0.50.9
-```
-
-Install a specific Helm 3 version:
-
-```bash
-make helm HELM_MAJOR=3 HELM_VERSION=v3.19.0
-```
-
-Install a specific crictl version:
-
-```bash
-make crictl CRICTL_VERSION=v1.34.0
-```
-
-Install a specific yq version:
-
-```bash
-make yq YQ_VERSION=v4.48.1
-```
-
-Install a specific Kustomize version:
-
-```bash
+make kubectl K8S_MINOR_VERSION=v1.34
+make kubeadm K8S_MINOR_VERSION=v1.34
+make argocd ARGOCD_VERSION=v3.4.2
+make helm HELM_VERSION=v3.21.0
 make kustomize KUSTOMIZE_VERSION=v5.8.1
+make k9s K9S_VERSION=v0.50.18
+make kubie KUBIE_VERSION=v0.28.0
+make kubecolor KUBECOLOR_VERSION=v0.6.0
+make stern STERN_VERSION=v1.34.0
+make crictl CRICTL_VERSION=v1.36.0
+make kubectl-tree KUBECTL_TREE_VERSION=v0.6.0
+make k8sgpt K8SGPT_VERSION=v0.4.33
+make yq YQ_VERSION=v4.53.2
+make kubespy KUBESPY_VERSION=v0.6.3
 ```
 
 Default behavior:
 
 ```text
+K8S_MINOR_VERSION=v1.36
 ARGOCD_VERSION=latest
-K9S_VERSION=latest
 HELM_MAJOR=3
 HELM_VERSION=
-CRICTL_VERSION=latest
-YQ_VERSION=latest
 KUSTOMIZE_VERSION=latest
+K9S_VERSION=latest
+KUBIE_VERSION=latest
+KUBECOLOR_VERSION=latest
+KUBECTL_TREE_VERSION=latest
+STERN_VERSION=latest
+CRICTL_VERSION=latest
+K8SGPT_VERSION=latest
+YQ_VERSION=latest
+KUBESPY_VERSION=latest
 ```
 
-## If Make is not installed yet
+## If Make Is Not Installed Yet
 
 Run the script directly first:
 
@@ -204,67 +248,32 @@ make install
 
 ## Troubleshooting
 
-If a tool still shows as `missing`, check whether `/usr/local/bin` is in your PATH:
+If a tool shows as `missing`, check whether `/usr/local/bin` is in your `PATH`:
 
 ```bash
 echo "$PATH"
-command -v argocd vault helm crictl yq kustomize
 ```
 
-Temporary PATH fix:
+Temporary fix:
 
 ```bash
 export PATH=/usr/local/bin:$PATH
 ```
 
-If only Kustomize fails, install it again directly with:
-
-```bash
-make kustomize
-```
-
-Or pin a known Kustomize release:
-
-```bash
-make kustomize KUSTOMIZE_VERSION=v5.8.1
-```
-
-Review the installer log:
+Review the newest installer log:
 
 ```bash
 ls -lt /tmp/devops-toolbelt-install-*.log | head
-```
-
-Then open the newest log:
-
-```bash
 less /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 ```
 
-## Install method notes
+## Install Method Notes
 
-- `jq`, `git`, `make`, and `tmux` are installed using Ubuntu apt packages.
-- Vault is installed using the HashiCorp apt repository.
-- Argo CD CLI is installed from the official GitHub release binary.
-- k9s is installed from the official GitHub `.deb` release asset.
-- Helm is installed using the official Helm install script.
-- crictl is installed from the Kubernetes SIGs `cri-tools` GitHub release tarball.
-- yq is installed from the `mikefarah/yq` GitHub release binary.
-- Kustomize is installed from the Kubernetes SIGs `kustomize` GitHub release tarball.
-
-
-## Kustomize installer fix
-
-Kustomize latest-release detection is pipe-safe in this bundle. The script first writes the GitHub releases response to a temporary file, then parses the newest `kustomize/v*` release from that file. This avoids the `curl: (23) Failure writing output to destination` error that can happen when `grep -m1` or `head` closes a pipe early while `pipefail` is enabled.
-
-To install only Kustomize:
-
-```bash
-make kustomize
-```
-
-To pin a known Kustomize version:
-
-```bash
-make kustomize KUSTOMIZE_VERSION=v5.8.1
-```
+- `kubectl` and `kubeadm` are installed from the official Kubernetes `pkgs.k8s.io` apt repository.
+- `helm` is installed with the official Helm installer script.
+- `kustomize` is installed from the Kubernetes SIGs GitHub release tarball.
+- `k9s`, `kubie`, `kubecolor`, `stern`, `k8sgpt`, `crictl`, `yq`, and `kubespy` are installed from their upstream GitHub releases.
+- `kubectl-tree` is installed from the upstream GitHub release asset.
+- `kubectx` and `kubens` are installed from the upstream `ahmetb/kubectx` scripts.
+- `git`, `make`, `jq`, and `tmux` are installed from Ubuntu apt packages.
+- `vault` is installed from the HashiCorp apt repository.

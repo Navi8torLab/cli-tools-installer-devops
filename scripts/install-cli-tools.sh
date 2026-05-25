@@ -8,15 +8,24 @@ set -Eeuo pipefail
 
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
-ARGOCD_VERSION="${ARGOCD_VERSION:-latest}"   # Example: v3.2.0 or latest
-K9S_VERSION="${K9S_VERSION:-latest}"         # Example: v0.50.9 or latest
-HELM_MAJOR="${HELM_MAJOR:-3}"                # Default: Helm 3
-HELM_VERSION="${HELM_VERSION:-}"             # Example: v3.19.0. Empty = latest for HELM_MAJOR
-CRICTL_VERSION="${CRICTL_VERSION:-latest}"   # Example: v1.34.0 or latest
-YQ_VERSION="${YQ_VERSION:-latest}"           # Example: v4.48.1 or latest
-KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-latest}" # Example: v5.8.1, 5.8.1, or latest
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 LOG_FILE="${LOG_FILE:-/tmp/devops-toolbelt-install-$(date +%Y%m%d-%H%M%S).log}"
+
+# Version overrides
+K8S_MINOR_VERSION="${K8S_MINOR_VERSION:-v1.36}"       # Kubernetes apt repo minor, example: v1.34, v1.35, v1.36
+ARGOCD_VERSION="${ARGOCD_VERSION:-latest}"           # Example: v3.4.2 or latest
+HELM_MAJOR="${HELM_MAJOR:-3}"                        # Default: Helm 3
+HELM_VERSION="${HELM_VERSION:-}"                     # Example: v3.21.0. Empty = latest for HELM_MAJOR
+KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-latest}"     # Example: v5.8.1, 5.8.1, or latest
+K9S_VERSION="${K9S_VERSION:-latest}"                 # Example: v0.50.18 or latest
+KUBIE_VERSION="${KUBIE_VERSION:-latest}"             # Example: v0.28.0 or latest
+KUBECOLOR_VERSION="${KUBECOLOR_VERSION:-latest}"     # Example: v0.6.0 or latest
+KUBECTL_TREE_VERSION="${KUBECTL_TREE_VERSION:-latest}" # Example: v0.6.0 or latest
+STERN_VERSION="${STERN_VERSION:-latest}"             # Example: v1.34.0 or latest
+CRICTL_VERSION="${CRICTL_VERSION:-latest}"           # Example: v1.36.0 or latest
+K8SGPT_VERSION="${K8SGPT_VERSION:-latest}"           # Example: v0.4.33 or latest
+YQ_VERSION="${YQ_VERSION:-latest}"                   # Example: v4.53.2 or latest
+KUBESPY_VERSION="${KUBESPY_VERSION:-latest}"         # Example: v0.6.3 or latest
 
 SUDO=""
 if [[ "${EUID}" -ne 0 ]]; then
@@ -29,6 +38,7 @@ APT_UPDATED=0
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
   RESET="$(tput sgr0)"
   BOLD="$(tput bold)"
+  DIM="$(tput dim)"
   RED="$(tput setaf 1)"
   GREEN="$(tput setaf 2)"
   YELLOW="$(tput setaf 3)"
@@ -38,6 +48,7 @@ if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/nul
 else
   RESET=""
   BOLD=""
+  DIM=""
   RED=""
   GREEN=""
   YELLOW=""
@@ -84,9 +95,7 @@ detect_ubuntu() {
     # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "${ID:-}" != "ubuntu" ]]; then
-      warn "This script was built for Ubuntu 22.04. Detected: ${PRETTY_NAME:-unknown Linux}."
-    elif [[ "${VERSION_ID:-}" != "22.04" ]]; then
-      warn "This script was built for Ubuntu 22.04. Detected: ${PRETTY_NAME:-Ubuntu ${VERSION_ID:-unknown}}."
+      warn "This script was built for Ubuntu 22.04 and newer. Detected: ${PRETTY_NAME:-unknown Linux}."
     fi
   else
     warn "Cannot read /etc/os-release. Continuing anyway."
@@ -103,12 +112,63 @@ get_arch() {
   esac
 }
 
+get_kubie_arch_pattern() {
+  local arch
+  arch="$(dpkg --print-architecture)"
+  case "${arch}" in
+    amd64) echo "linux.*(amd64|x86_64|x86-64)" ;;
+    arm64) echo "linux.*(arm64|aarch64)" ;;
+    *) die "Unsupported architecture: ${arch}. Supported: amd64, arm64." ;;
+  esac
+}
+
 latest_github_tag() {
   local repo="$1"
   local effective_url
   effective_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${repo}/releases/latest")"
   echo "${effective_url}" | sed -E 's#^.*/tag/([^/?#]+).*$#\1#'
 }
+
+download_github_release_json() {
+  local repo="$1"
+  local version="$2"
+  local output="$3"
+
+  if [[ "${version}" == "latest" ]]; then
+    run curl -fsSL -o "${output}" "https://api.github.com/repos/${repo}/releases/latest"
+  else
+    run curl -fsSL -o "${output}" "https://api.github.com/repos/${repo}/releases/tags/${version}"
+  fi
+}
+
+extract_first_release_asset_url() {
+  local json_file="$1"
+  local include_regex="$2"
+  local exclude_regex="${3:-(__never_match__)}"
+
+  awk -F'"' '/"browser_download_url":/ {print $4}' "${json_file}" \
+    | grep -Ei "${include_regex}" \
+    | grep -Evi "${exclude_regex}" \
+    | head -n 1
+}
+
+extract_release_asset_url_awk() {
+  local json_file="$1"
+  local include_regex="$2"
+  local exclude_regex="${3:-$^}"
+
+  awk -v include="${include_regex}" -v exclude="${exclude_regex}" -F'"' '
+    /"browser_download_url":/ {
+      url=$4
+      low=tolower(url)
+      if (low ~ tolower(include) && low !~ tolower(exclude)) {
+        print url
+        exit
+      }
+    }
+  ' "${json_file}"
+}
+
 
 apt_update_once() {
   if [[ "${APT_UPDATED}" -eq 0 ]]; then
@@ -122,6 +182,7 @@ install_base_packages() {
   apt_update_once
   info "Installing base dependencies"
   run ${SUDO} apt-get install -y \
+    bash \
     ca-certificates \
     curl \
     wget \
@@ -131,108 +192,92 @@ install_base_packages() {
     unzip \
     tar \
     gzip \
-    openssl
+    openssl \
+    awk \
+    sed \
+    grep \
+    coreutils
 }
 
 install_apt_package() {
   local pkg="$1"
+  local cmd="${2:-$1}"
+
   install_base_packages
   info "Installing ${pkg} via apt"
   run ${SUDO} apt-get install -y "${pkg}"
-  command -v "${pkg}" >/dev/null 2>&1 || die "${pkg} was installed by apt but is not in PATH"
+  command -v "${cmd}" >/dev/null 2>&1 || die "${cmd} was installed by apt package ${pkg} but is not in PATH"
   success "${pkg} installed"
 }
 
-# ---------- Individual installers ----------
-install_argocd() {
-  install_base_packages
+install_from_tarball_find_binary() {
+  local url="$1"
+  local binary_name="$2"
+  local archive_name="$3"
+  local tmpdir archive extracted_binary
 
-  local arch url tmp
-  arch="$(get_arch)"
+  tmpdir="$(mktemp -d)"
+  archive="${tmpdir}/${archive_name}"
 
-  if [[ "${ARGOCD_VERSION}" == "latest" ]]; then
-    url="https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${arch}"
-  else
-    url="https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-${arch}"
-  fi
+  run curl -fL --retry 3 --retry-delay 2 -o "${archive}" "${url}"
+  run tar -xzf "${archive}" -C "${tmpdir}"
 
-  tmp="$(mktemp)"
-  info "Installing Argo CD CLI (${ARGOCD_VERSION})"
-  run curl -fsSL -o "${tmp}" "${url}"
-  run chmod +x "${tmp}"
-  run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/argocd"
-  rm -f "${tmp}"
+  extracted_binary="$(find "${tmpdir}" -type f -name "${binary_name}" | head -n 1 || true)"
+  [[ -n "${extracted_binary}" ]] || {
+    rm -rf "${tmpdir}"
+    die "${binary_name} binary was not found after extracting ${archive_name}"
+  }
 
-  command -v argocd >/dev/null 2>&1 || die "argocd installed to ${INSTALL_DIR}, but argocd is not in PATH"
-  success "argocd installed at ${INSTALL_DIR}/argocd"
+  run chmod +x "${extracted_binary}"
+  run ${SUDO} install -m 0755 "${extracted_binary}" "${INSTALL_DIR}/${binary_name}"
+  rm -rf "${tmpdir}"
+
+  command -v "${binary_name}" >/dev/null 2>&1 || die "${binary_name} installed to ${INSTALL_DIR}, but it is not in PATH"
+  success "${binary_name} installed at ${INSTALL_DIR}/${binary_name}"
 }
 
-install_vault() {
+# ---------- Core & Official Tools ----------
+configure_kubernetes_apt_repo() {
   install_base_packages
 
-  info "Adding HashiCorp apt repository"
-  local key_tmp repo_line
+  info "Configuring Kubernetes apt repository for ${K8S_MINOR_VERSION}"
+  run ${SUDO} mkdir -p /etc/apt/keyrings
+
+  local key_tmp
   key_tmp="$(mktemp)"
 
-  run curl -fsSL https://apt.releases.hashicorp.com/gpg -o "${key_tmp}.asc"
+  run curl -fsSL "https://pkgs.k8s.io/core:/stable:/${K8S_MINOR_VERSION}/deb/Release.key" -o "${key_tmp}.asc"
   run gpg --dearmor -o "${key_tmp}.gpg" "${key_tmp}.asc"
-  run ${SUDO} install -m 0644 "${key_tmp}.gpg" /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  run ${SUDO} install -m 0644 "${key_tmp}.gpg" /etc/apt/keyrings/kubernetes-apt-keyring.gpg
   rm -f "${key_tmp}" "${key_tmp}.asc" "${key_tmp}.gpg"
 
-  repo_line="deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-  echo "${repo_line}" | ${SUDO} tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+  echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${K8S_MINOR_VERSION}/deb/ /" \
+    | ${SUDO} tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
 
   APT_UPDATED=0
   apt_update_once
-
-  info "Installing Vault CLI"
-  run ${SUDO} apt-get install -y vault
-  command -v vault >/dev/null 2>&1 || die "vault was installed but is not in PATH"
-  success "vault installed"
 }
 
-install_jq() {
-  install_apt_package "jq"
+install_kubectl() {
+  configure_kubernetes_apt_repo
+  info "Installing kubectl"
+  run ${SUDO} apt-get install -y kubectl
+  command -v kubectl >/dev/null 2>&1 || die "kubectl was installed but is not in PATH"
+  success "kubectl installed"
 }
 
-install_git() {
-  install_apt_package "git"
-}
-
-install_make() {
-  install_apt_package "make"
-}
-
-install_tmux() {
-  install_apt_package "tmux"
-}
-
-install_k9s() {
-  install_base_packages
-
-  local arch url deb
-  arch="$(get_arch)"
-
-  if [[ "${K9S_VERSION}" == "latest" ]]; then
-    url="https://github.com/derailed/k9s/releases/latest/download/k9s_linux_${arch}.deb"
-  else
-    url="https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_linux_${arch}.deb"
-  fi
-
-  deb="$(mktemp --suffix=.deb)"
-  info "Installing k9s (${K9S_VERSION})"
-  run curl -fsSL -o "${deb}" "${url}"
-  run ${SUDO} apt-get install -y "${deb}"
-  rm -f "${deb}"
-
-  command -v k9s >/dev/null 2>&1 || die "k9s was installed but is not in PATH"
-  success "k9s installed"
+install_kubeadm() {
+  configure_kubernetes_apt_repo
+  info "Installing kubeadm"
+  run ${SUDO} apt-get install -y kubeadm
+  command -v kubeadm >/dev/null 2>&1 || die "kubeadm was installed but is not in PATH"
+  success "kubeadm installed"
 }
 
 install_helm() {
   install_base_packages
 
-  local helm_script script_url
+  local helm_script script_url rc
   helm_script="$(mktemp)"
   script_url="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-${HELM_MAJOR}"
 
@@ -256,59 +301,6 @@ install_helm() {
   success "helm installed"
 }
 
-install_crictl() {
-  install_base_packages
-
-  local arch version url tmpdir archive
-  arch="$(get_arch)"
-
-  if [[ "${CRICTL_VERSION}" == "latest" ]]; then
-    version="$(latest_github_tag "kubernetes-sigs/cri-tools")"
-  else
-    version="${CRICTL_VERSION}"
-  fi
-
-  [[ -n "${version}" ]] || die "Unable to determine crictl version."
-
-  url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${version}/crictl-${version}-linux-${arch}.tar.gz"
-  tmpdir="$(mktemp -d)"
-  archive="${tmpdir}/crictl.tar.gz"
-
-  info "Installing crictl (${version})"
-  run curl -fsSL -o "${archive}" "${url}"
-  run tar -xzf "${archive}" -C "${tmpdir}"
-  run ${SUDO} install -m 0755 "${tmpdir}/crictl" "${INSTALL_DIR}/crictl"
-  rm -rf "${tmpdir}"
-
-  command -v crictl >/dev/null 2>&1 || die "crictl installed to ${INSTALL_DIR}, but crictl is not in PATH"
-  success "crictl installed at ${INSTALL_DIR}/crictl"
-}
-
-install_yq() {
-  install_base_packages
-
-  local arch version url tmp
-  arch="$(get_arch)"
-
-  if [[ "${YQ_VERSION}" == "latest" ]]; then
-    url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${arch}"
-    version="latest"
-  else
-    version="${YQ_VERSION}"
-    url="https://github.com/mikefarah/yq/releases/download/${version}/yq_linux_${arch}"
-  fi
-
-  tmp="$(mktemp)"
-  info "Installing yq (${version})"
-  run curl -fsSL -o "${tmp}" "${url}"
-  run chmod +x "${tmp}"
-  run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/yq"
-  rm -f "${tmp}"
-
-  command -v yq >/dev/null 2>&1 || die "yq installed to ${INSTALL_DIR}, but yq is not in PATH"
-  success "yq installed at ${INSTALL_DIR}/yq"
-}
-
 install_kustomize() {
   install_base_packages
 
@@ -319,10 +311,6 @@ install_kustomize() {
   if [[ "${KUSTOMIZE_VERSION}" == "latest" ]]; then
     info "Finding latest Kustomize release"
     releases_json="${tmpdir}/kustomize-releases.json"
-
-    # Do not pipe curl directly into grep/head while pipefail is enabled.
-    # grep -m1/head can close the pipe early and make curl fail with:
-    #   curl: (23) Failure writing output to destination
     run curl -fsSL -o "${releases_json}" "https://api.github.com/repos/kubernetes-sigs/kustomize/releases?per_page=100"
 
     version="$(
@@ -355,21 +343,388 @@ install_kustomize() {
 
   info "Installing Kustomize (${tag})"
   run curl -fL --retry 3 --retry-delay 2 -o "${archive}" "${url}"
-
-  info "Extracting ${asset}"
   run tar -xzf "${archive}" -C "${tmpdir}"
 
   extracted_binary="${tmpdir}/kustomize"
-  if [[ ! -f "${extracted_binary}" ]]; then
+  [[ -f "${extracted_binary}" ]] || {
     rm -rf "${tmpdir}"
     die "Kustomize binary was not found after extracting ${asset}"
-  fi
+  }
 
   run ${SUDO} install -m 0755 "${extracted_binary}" "${INSTALL_DIR}/kustomize"
   rm -rf "${tmpdir}"
 
   command -v kustomize >/dev/null 2>&1 || die "kustomize installed to ${INSTALL_DIR}, but kustomize is not in PATH"
   success "kustomize installed at ${INSTALL_DIR}/kustomize"
+}
+
+# ---------- Cluster Navigation & Efficiency ----------
+install_k9s() {
+  install_base_packages
+
+  local arch url deb
+  arch="$(get_arch)"
+
+  if [[ "${K9S_VERSION}" == "latest" ]]; then
+    url="https://github.com/derailed/k9s/releases/latest/download/k9s_linux_${arch}.deb"
+  else
+    url="https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_linux_${arch}.deb"
+  fi
+
+  deb="$(mktemp --suffix=.deb)"
+  info "Installing k9s (${K9S_VERSION})"
+  run curl -fsSL -o "${deb}" "${url}"
+  run ${SUDO} apt-get install -y "${deb}"
+  rm -f "${deb}"
+
+  command -v k9s >/dev/null 2>&1 || die "k9s was installed but is not in PATH"
+  success "k9s installed"
+}
+
+install_tmux() {
+  install_apt_package "tmux"
+}
+
+install_kubectx_kubens() {
+  install_base_packages
+
+  info "Installing kubectx and kubens"
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+
+  run curl -fsSL -o "${tmpdir}/kubectx" "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx"
+  run curl -fsSL -o "${tmpdir}/kubens" "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens"
+
+  run ${SUDO} install -m 0755 "${tmpdir}/kubectx" "${INSTALL_DIR}/kubectx"
+  run ${SUDO} install -m 0755 "${tmpdir}/kubens" "${INSTALL_DIR}/kubens"
+  rm -rf "${tmpdir}"
+
+  command -v kubectx >/dev/null 2>&1 || die "kubectx installed to ${INSTALL_DIR}, but it is not in PATH"
+  command -v kubens >/dev/null 2>&1 || die "kubens installed to ${INSTALL_DIR}, but it is not in PATH"
+  success "kubectx and kubens installed"
+}
+
+install_kubie() {
+  install_base_packages
+
+  local version json include url tmpdir asset download_path binary
+  if [[ "${KUBIE_VERSION}" == "latest" ]]; then
+    version="latest"
+  else
+    version="${KUBIE_VERSION}"
+  fi
+
+  tmpdir="$(mktemp -d)"
+  json="${tmpdir}/kubie-release.json"
+
+  info "Finding Kubie release asset (${version})"
+  download_github_release_json "kubie-org/kubie" "${version}" "${json}"
+
+  include="$(get_kubie_arch_pattern)"
+  url="$(extract_first_release_asset_url "${json}" "${include}" "(sha|checksum|\.txt|\.sig|\.asc)$")"
+
+  if [[ -z "${url}" ]]; then
+    rm -rf "${tmpdir}"
+    die "Unable to find a Kubie Linux asset for this architecture."
+  fi
+
+  asset="$(basename "${url}")"
+  download_path="${tmpdir}/${asset}"
+
+  info "Installing Kubie from ${asset}"
+  run curl -fL --retry 3 --retry-delay 2 -o "${download_path}" "${url}"
+
+  case "${asset}" in
+    *.tar.gz|*.tgz)
+      run tar -xzf "${download_path}" -C "${tmpdir}"
+      ;;
+    *.zip)
+      run unzip -o "${download_path}" -d "${tmpdir}"
+      ;;
+    *)
+      ;;
+  esac
+
+  binary="$(find "${tmpdir}" -type f \( -name "kubie" -o -name "kubie-linux-*" -o -name "kubie_*" \) | head -n 1 || true)"
+  [[ -n "${binary}" ]] || {
+    rm -rf "${tmpdir}"
+    die "Kubie binary was not found in release asset ${asset}"
+  }
+
+  run chmod +x "${binary}"
+  run ${SUDO} install -m 0755 "${binary}" "${INSTALL_DIR}/kubie"
+  rm -rf "${tmpdir}"
+
+  command -v kubie >/dev/null 2>&1 || die "kubie installed to ${INSTALL_DIR}, but it is not in PATH"
+  success "kubie installed at ${INSTALL_DIR}/kubie"
+}
+
+
+install_kubecolor() {
+  install_base_packages
+
+  local arch version json tmpdir url asset download_path binary
+  arch="$(get_arch)"
+
+  if [[ "${KUBECOLOR_VERSION}" == "latest" ]]; then
+    version="latest"
+  else
+    version="${KUBECOLOR_VERSION}"
+  fi
+
+  tmpdir="$(mktemp -d)"
+  json="${tmpdir}/kubecolor-release.json"
+
+  info "Finding Kubecolor release asset (${version})"
+  download_github_release_json "kubecolor/kubecolor" "${version}" "${json}"
+
+  # Prefer the native .deb package when available. Fall back to a raw Linux binary asset.
+  url="$(extract_release_asset_url_awk "${json}" "linux.*${arch}.*\\.deb$" "(rpm|sha|checksum|txt|sig|asc)")"
+  if [[ -z "${url}" ]]; then
+    url="$(extract_release_asset_url_awk "${json}" "linux.*${arch}$" "(deb|rpm|sha|checksum|txt|sig|asc)")"
+  fi
+
+  if [[ -z "${url}" ]]; then
+    rm -rf "${tmpdir}"
+    die "Unable to find a Kubecolor Linux asset for architecture ${arch}."
+  fi
+
+  asset="$(basename "${url}")"
+  download_path="${tmpdir}/${asset}"
+
+  info "Installing Kubecolor from ${asset}"
+  run curl -fL --retry 3 --retry-delay 2 -o "${download_path}" "${url}"
+
+  case "${asset}" in
+    *.deb)
+      run ${SUDO} apt-get install -y "${download_path}"
+      ;;
+    *.tar.gz|*.tgz)
+      run tar -xzf "${download_path}" -C "${tmpdir}"
+      binary="$(find "${tmpdir}" -type f -name "kubecolor" | head -n 1 || true)"
+      [[ -n "${binary}" ]] || {
+        rm -rf "${tmpdir}"
+        die "kubecolor binary was not found after extracting ${asset}"
+      }
+      run chmod +x "${binary}"
+      run ${SUDO} install -m 0755 "${binary}" "${INSTALL_DIR}/kubecolor"
+      ;;
+    *)
+      run chmod +x "${download_path}"
+      run ${SUDO} install -m 0755 "${download_path}" "${INSTALL_DIR}/kubecolor"
+      ;;
+  esac
+
+  rm -rf "${tmpdir}"
+  command -v kubecolor >/dev/null 2>&1 || die "kubecolor installed, but it is not in PATH"
+  success "kubecolor installed"
+}
+
+install_kubectl_tree() {
+  install_base_packages
+
+  local arch tag version_no_v asset url
+  arch="$(get_arch)"
+
+  if [[ "${KUBECTL_TREE_VERSION}" == "latest" ]]; then
+    tag="$(latest_github_tag "ahmetb/kubectl-tree")"
+  else
+    tag="${KUBECTL_TREE_VERSION}"
+  fi
+
+  version_no_v="${tag#v}"
+  asset="kubectl-tree_v${version_no_v}_linux_${arch}.tar.gz"
+  url="https://github.com/ahmetb/kubectl-tree/releases/download/v${version_no_v}/${asset}"
+
+  info "Installing kubectl-tree (${tag})"
+  install_from_tarball_find_binary "${url}" "kubectl-tree" "${asset}"
+
+  command -v kubectl-tree >/dev/null 2>&1 || die "kubectl-tree installed to ${INSTALL_DIR}, but it is not in PATH"
+  success "kubectl-tree installed. Use it as: kubectl tree"
+}
+
+# ---------- Debugging & Observability ----------
+install_stern() {
+  install_base_packages
+
+  local arch tag version_no_v asset url
+  arch="$(get_arch)"
+
+  if [[ "${STERN_VERSION}" == "latest" ]]; then
+    tag="$(latest_github_tag "stern/stern")"
+  else
+    tag="${STERN_VERSION}"
+  fi
+
+  version_no_v="${tag#v}"
+  asset="stern_${version_no_v}_linux_${arch}.tar.gz"
+  url="https://github.com/stern/stern/releases/download/${tag}/${asset}"
+
+  info "Installing Stern (${tag})"
+  install_from_tarball_find_binary "${url}" "stern" "${asset}"
+}
+
+install_crictl() {
+  install_base_packages
+
+  local arch version url tmpdir archive
+  arch="$(get_arch)"
+
+  if [[ "${CRICTL_VERSION}" == "latest" ]]; then
+    version="$(latest_github_tag "kubernetes-sigs/cri-tools")"
+  else
+    version="${CRICTL_VERSION}"
+  fi
+
+  [[ -n "${version}" ]] || die "Unable to determine crictl version."
+
+  url="https://github.com/kubernetes-sigs/cri-tools/releases/download/${version}/crictl-${version}-linux-${arch}.tar.gz"
+  tmpdir="$(mktemp -d)"
+  archive="${tmpdir}/crictl.tar.gz"
+
+  info "Installing crictl (${version})"
+  run curl -fsSL -o "${archive}" "${url}"
+  run tar -xzf "${archive}" -C "${tmpdir}"
+  run ${SUDO} install -m 0755 "${tmpdir}/crictl" "${INSTALL_DIR}/crictl"
+  rm -rf "${tmpdir}"
+
+  command -v crictl >/dev/null 2>&1 || die "crictl installed to ${INSTALL_DIR}, but crictl is not in PATH"
+  success "crictl installed at ${INSTALL_DIR}/crictl"
+}
+
+# ---------- Monitoring & Operations ----------
+install_argocd() {
+  install_base_packages
+
+  local arch url tmp
+  arch="$(get_arch)"
+
+  if [[ "${ARGOCD_VERSION}" == "latest" ]]; then
+    url="https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${arch}"
+  else
+    url="https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-${arch}"
+  fi
+
+  tmp="$(mktemp)"
+  info "Installing Argo CD CLI (${ARGOCD_VERSION})"
+  run curl -fsSL -o "${tmp}" "${url}"
+  run chmod +x "${tmp}"
+  run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/argocd"
+  rm -f "${tmp}"
+
+  command -v argocd >/dev/null 2>&1 || die "argocd installed to ${INSTALL_DIR}, but argocd is not in PATH"
+  success "argocd installed at ${INSTALL_DIR}/argocd"
+}
+
+install_k8sgpt() {
+  install_base_packages
+
+  local arch deb_arch version url deb
+  arch="$(get_arch)"
+  case "${arch}" in
+    amd64) deb_arch="amd64" ;;
+    arm64) deb_arch="arm64" ;;
+    *) die "Unsupported architecture for K8sGPT: ${arch}" ;;
+  esac
+
+  if [[ "${K8SGPT_VERSION}" == "latest" ]]; then
+    version="$(latest_github_tag "k8sgpt-ai/k8sgpt")"
+  else
+    version="${K8SGPT_VERSION}"
+  fi
+
+  url="https://github.com/k8sgpt-ai/k8sgpt/releases/download/${version}/k8sgpt_${deb_arch}.deb"
+  deb="$(mktemp --suffix=.deb)"
+
+  info "Installing K8sGPT (${version})"
+  run curl -fL --retry 3 --retry-delay 2 -o "${deb}" "${url}"
+  run ${SUDO} apt-get install -y "${deb}"
+  rm -f "${deb}"
+
+  command -v k8sgpt >/dev/null 2>&1 || die "k8sgpt was installed but is not in PATH"
+  success "k8sgpt installed"
+}
+
+# ---------- Workflow Automation & Source Control ----------
+install_git() {
+  install_apt_package "git"
+}
+
+install_make() {
+  install_apt_package "make"
+}
+
+install_jq() {
+  install_apt_package "jq"
+}
+
+install_yq() {
+  install_base_packages
+
+  local arch version url tmp
+  arch="$(get_arch)"
+
+  if [[ "${YQ_VERSION}" == "latest" ]]; then
+    url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${arch}"
+    version="latest"
+  else
+    version="${YQ_VERSION}"
+    url="https://github.com/mikefarah/yq/releases/download/${version}/yq_linux_${arch}"
+  fi
+
+  tmp="$(mktemp)"
+  info "Installing yq (${version})"
+  run curl -fsSL -o "${tmp}" "${url}"
+  run chmod +x "${tmp}"
+  run ${SUDO} install -m 0755 "${tmp}" "${INSTALL_DIR}/yq"
+  rm -f "${tmp}"
+
+  command -v yq >/dev/null 2>&1 || die "yq installed to ${INSTALL_DIR}, but yq is not in PATH"
+  success "yq installed at ${INSTALL_DIR}/yq"
+}
+
+# ---------- Security & Compliance Tracking ----------
+install_vault() {
+  install_base_packages
+
+  info "Adding HashiCorp apt repository"
+  local key_tmp repo_line
+  key_tmp="$(mktemp)"
+
+  run curl -fsSL https://apt.releases.hashicorp.com/gpg -o "${key_tmp}.asc"
+  run gpg --dearmor -o "${key_tmp}.gpg" "${key_tmp}.asc"
+  run ${SUDO} install -m 0644 "${key_tmp}.gpg" /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  rm -f "${key_tmp}" "${key_tmp}.asc" "${key_tmp}.gpg"
+
+  repo_line="deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+  echo "${repo_line}" | ${SUDO} tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+
+  APT_UPDATED=0
+  apt_update_once
+
+  info "Installing Vault CLI"
+  run ${SUDO} apt-get install -y vault
+  command -v vault >/dev/null 2>&1 || die "vault was installed but is not in PATH"
+  success "vault installed"
+}
+
+install_kubespy() {
+  install_base_packages
+
+  local arch tag asset url
+  arch="$(get_arch)"
+
+  if [[ "${KUBESPY_VERSION}" == "latest" ]]; then
+    tag="$(latest_github_tag "pulumi/kubespy")"
+  else
+    tag="${KUBESPY_VERSION}"
+  fi
+
+  asset="kubespy-${tag}-linux-${arch}.tar.gz"
+  url="https://github.com/pulumi/kubespy/releases/download/${tag}/${asset}"
+
+  info "Installing kubespy (${tag})"
+  install_from_tarball_find_binary "${url}" "kubespy" "${asset}"
 }
 
 # ---------- Verification ----------
@@ -382,14 +737,50 @@ version_of() {
   fi
 
   case "${tool}" in
+    kubectl)
+      kubectl version --client=true --output=yaml 2>/dev/null | awk '/gitVersion:/ {print $2; exit}' || kubectl version --client 2>/dev/null || true
+      ;;
+    kubeadm)
+      kubeadm version -o short 2>/dev/null || kubeadm version 2>/dev/null || true
+      ;;
+    helm)
+      helm version --short 2>/dev/null || helm version 2>/dev/null || true
+      ;;
+    kustomize)
+      kustomize version 2>/dev/null || true
+      ;;
+    k9s)
+      k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true
+      ;;
+    tmux)
+      tmux -V 2>/dev/null || true
+      ;;
+    kubectx)
+      kubectx --help 2>/dev/null | head -n 1 || echo "installed"
+      ;;
+    kubens)
+      kubens --help 2>/dev/null | head -n 1 || echo "installed"
+      ;;
+    kubie)
+      kubie --version 2>/dev/null || true
+      ;;
+    kubecolor)
+      kubecolor --version 2>/dev/null || kubecolor version 2>/dev/null || echo "installed"
+      ;;
+    kubectl-tree)
+      kubectl-tree --help 2>/dev/null | head -n 1 || echo "installed"
+      ;;
+    stern)
+      stern --version 2>/dev/null || true
+      ;;
+    crictl)
+      crictl --version 2>/dev/null || true
+      ;;
     argocd)
       argocd version --client --short 2>/dev/null || argocd version --client 2>/dev/null || true
       ;;
-    vault)
-      vault version 2>/dev/null || true
-      ;;
-    jq)
-      jq --version 2>/dev/null || true
+    k8sgpt)
+      k8sgpt version 2>/dev/null || k8sgpt --version 2>/dev/null || true
       ;;
     git)
       git --version 2>/dev/null || true
@@ -397,23 +788,17 @@ version_of() {
     make)
       make --version 2>/dev/null | head -n 1 || true
       ;;
-    tmux)
-      tmux -V 2>/dev/null || true
-      ;;
-    k9s)
-      k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true
-      ;;
-    helm)
-      helm version --short 2>/dev/null || helm version 2>/dev/null || true
-      ;;
-    crictl)
-      crictl --version 2>/dev/null || true
+    jq)
+      jq --version 2>/dev/null || true
       ;;
     yq)
       yq --version 2>/dev/null || true
       ;;
-    kustomize)
-      kustomize version 2>/dev/null || true
+    vault)
+      vault version 2>/dev/null || true
+      ;;
+    kubespy)
+      kubespy version 2>/dev/null || kubespy --version 2>/dev/null || echo "installed"
       ;;
     *)
       "${tool}" --version 2>/dev/null || true
@@ -421,24 +806,58 @@ version_of() {
   esac
 }
 
+verify_tool() {
+  local tool="$1"
+  if command -v "${tool}" >/dev/null 2>&1; then
+    printf "%-14s " "${tool}"
+    version_of "${tool}" | head -n 1
+  else
+    printf "%-14s %b\n" "${tool}" "${RED}missing${RESET}"
+  fi
+}
+
 verify_all() {
   echo
   echo -e "${BOLD}${CYAN}Installed CLI versions${RESET}"
-  printf "%-12s %s\n" "Tool" "Version"
-  printf "%-12s %s\n" "----" "-------"
 
-  local tool
-  for tool in argocd vault jq git make tmux k9s helm crictl yq kustomize; do
-    if command -v "${tool}" >/dev/null 2>&1; then
-      printf "%-12s " "${tool}"
-      version_of "${tool}" | head -n 1
-    else
-      printf "%-12s %b\n" "${tool}" "${RED}missing${RESET}"
-    fi
-  done
+  echo
+  echo -e "${BOLD}Kubernetes Core, Packaging & Manifest Tools${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in kubectl kubeadm helm kustomize; do verify_tool "${tool}"; done
+
+  echo
+  echo -e "${BOLD}Cluster Navigation, Inspection & Efficiency${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in k9s tmux kubectx kubens kubie kubecolor; do verify_tool "${tool}"; done
+
+  echo
+  echo -e "${BOLD}Debugging & Observability${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in stern crictl kubectl-tree kubespy; do verify_tool "${tool}"; done
+
+  echo
+  echo -e "${BOLD}GitOps & Operational Diagnostics${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in argocd k8sgpt; do verify_tool "${tool}"; done
+
+  echo
+  echo -e "${BOLD}Workflow Automation & Source Control${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in git make jq yq; do verify_tool "${tool}"; done
+
+  echo
+  echo -e "${BOLD}Secrets & Security${RESET}"
+  printf "%-14s %s\n" "Tool" "Version"
+  printf "%-14s %s\n" "----" "-------"
+  for tool in vault; do verify_tool "${tool}"; done
 }
 
-# ---------- Install all with per-tool summary ----------
+# ---------- Install all ----------
 install_one_with_summary() {
   local label="$1"
   local func="$2"
@@ -468,24 +887,35 @@ install_all() {
   INSTALL_OK=()
   INSTALL_FAILED=()
 
-  echo -e "${BOLD}${CYAN}Installing all CLI tools${RESET}"
+  echo -e "${BOLD}${CYAN}Installing full DevOps & Kubernetes toolbelt${RESET}"
   echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
   echo
 
-  # Apt-based tools first.
-  install_one_with_summary "jq" "install_jq"
+  install_one_with_summary "kubectl" "install_kubectl"
+  install_one_with_summary "kubeadm" "install_kubeadm"
+  install_one_with_summary "Helm" "install_helm"
+  install_one_with_summary "Kustomize" "install_kustomize"
+
+  install_one_with_summary "K9s" "install_k9s"
+  install_one_with_summary "tmux" "install_tmux"
+  install_one_with_summary "kubectx & kubens" "install_kubectx_kubens"
+  install_one_with_summary "Kubie" "install_kubie"
+  install_one_with_summary "Kubecolor" "install_kubecolor"
+
+  install_one_with_summary "Stern" "install_stern"
+  install_one_with_summary "crictl" "install_crictl"
+  install_one_with_summary "kubectl tree" "install_kubectl_tree"
+  install_one_with_summary "kubespy" "install_kubespy"
+
+  install_one_with_summary "Argo CD CLI" "install_argocd"
+  install_one_with_summary "K8sGPT" "install_k8sgpt"
+
   install_one_with_summary "git" "install_git"
   install_one_with_summary "make" "install_make"
-  install_one_with_summary "tmux" "install_tmux"
-
-  # Upstream release/repo-based tools.
-  install_one_with_summary "helm" "install_helm"
-  install_one_with_summary "argocd" "install_argocd"
-  install_one_with_summary "vault" "install_vault"
-  install_one_with_summary "k9s" "install_k9s"
-  install_one_with_summary "crictl" "install_crictl"
+  install_one_with_summary "jq" "install_jq"
   install_one_with_summary "yq" "install_yq"
-  install_one_with_summary "kustomize" "install_kustomize"
+
+  install_one_with_summary "Vault CLI" "install_vault"
 
   echo
   echo -e "${BOLD}${CYAN}Install summary${RESET}"
@@ -505,7 +935,6 @@ install_all() {
     return 1
   fi
 }
-
 
 run_menu_action() {
   local label="$1"
@@ -535,7 +964,14 @@ menu_row() {
   local number="$1"
   local label="$2"
   local desc="$3"
-  printf "${GREEN}%2s)${RESET} %-24s ${CYAN}%s${RESET}\n" "${number}" "${label}" "${desc}"
+  printf "${GREEN}%2s)${RESET} %-26s ${CYAN}%s${RESET}\n" "${number}" "${label}" "${desc}"
+}
+
+category_header() {
+  local title="$1"
+  echo
+  echo -e "${BOLD}${MAGENTA}${title}${RESET}"
+  echo -e "${DIM}$(printf '%*s' "${#title}" '' | tr ' ' '-')${RESET}"
 }
 
 print_menu() {
@@ -557,56 +993,97 @@ print_menu() {
   echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
   echo -e "  ${GREEN}•${RESET} Select option 1 to install the full DevOps toolbelt."
   echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
-  echo -e "  ${GREEN}•${RESET} Use the version override variables below when pinning releases."
+  echo -e "  ${GREEN}•${RESET} Use version override variables below when pinning releases."
   echo
   echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
   echo
-  menu_row "1"  "Install ALL tools"    "Install every CLI listed below"
-  menu_row "2"  "Argo CD CLI"          "GitOps continuous delivery CLI"
-  menu_row "3"  "Vault CLI"            "HashiCorp secrets management CLI"
-  menu_row "4"  "jq"                   "JSON query and formatting tool"
-  menu_row "5"  "git"                  "Source control client"
-  menu_row "6"  "make"                 "Task runner/build automation"
-  menu_row "7"  "tmux"                 "Persistent terminal multiplexer"
-  menu_row "8"  "k9s"                  "Terminal UI for Kubernetes"
-  menu_row "9"  "Helm CLI"             "Kubernetes package manager"
-  menu_row "10" "crictl"               "Container runtime CRI debug CLI"
-  menu_row "11" "yq"                   "YAML/JSON processor"
-  menu_row "12" "Kustomize"            "Kubernetes YAML overlay manager"
-  menu_row "13" "Verify versions"      "Show installed CLI versions"
-  menu_row "0"  "Quit"                 "Exit installer"
+
+  menu_row "1" "Install ALL tools" "Install every tool in category order"
+
+  category_header "Kubernetes Core, Packaging & Manifest Tools"
+  menu_row "2" "kubectl" "Official Kubernetes CLI"
+  menu_row "3" "kubeadm" "Kubernetes cluster bootstrap CLI"
+  menu_row "4" "Helm" "Kubernetes package manager"
+  menu_row "5" "Kustomize" "Kubernetes YAML overlay manager"
+
+  category_header "Cluster Navigation, Inspection & Efficiency"
+  menu_row "6" "K9s" "Terminal UI for Kubernetes"
+  menu_row "7" "tmux" "Persistent terminal multiplexer"
+  menu_row "8" "kubectx & kubens" "Switch kube contexts and namespaces"
+  menu_row "9" "Kubie" "Isolated kube context shells"
+  menu_row "10" "Kubecolor" "Colorized kubectl output wrapper"
+
+  category_header "Debugging & Observability"
+  menu_row "11" "Stern" "Multi-pod log tailing"
+  menu_row "12" "crictl" "Container runtime CRI debug CLI"
+  menu_row "13" "kubectl tree" "Show Kubernetes ownership trees"
+  menu_row "14" "kubespy" "Watch Kubernetes resource changes"
+
+  category_header "GitOps & Operational Diagnostics"
+  menu_row "15" "Argo CD CLI" "GitOps continuous delivery CLI"
+  menu_row "16" "K8sGPT" "AI-assisted Kubernetes diagnostics"
+
+  category_header "Workflow Automation & Source Control"
+  menu_row "17" "git" "Source control client"
+  menu_row "18" "make" "Task runner/build automation"
+  menu_row "19" "jq" "JSON query and formatting tool"
+  menu_row "20" "yq" "YAML/JSON processor"
+
+  category_header "Secrets & Security"
+  menu_row "21" "Vault CLI" "HashiCorp secrets management CLI"
+
+  echo
+  menu_row "22" "Verify versions" "Show installed CLI versions by category"
+  menu_row "0" "Quit" "Exit installer"
+
   echo
   echo -e "${YELLOW}Version overrides:${RESET}"
-  echo "  ARGOCD_VERSION=v3.2.0"
-  echo "  K9S_VERSION=v0.50.9"
+  echo "  K8S_MINOR_VERSION=v1.36"
+  echo "  ARGOCD_VERSION=v3.4.2"
   echo "  HELM_MAJOR=3"
-  echo "  HELM_VERSION=v3.19.0"
-  echo "  CRICTL_VERSION=v1.34.0"
-  echo "  YQ_VERSION=v4.48.1"
+  echo "  HELM_VERSION=v3.21.0"
   echo "  KUSTOMIZE_VERSION=v5.8.1"
+  echo "  K9S_VERSION=v0.50.18"
+  echo "  KUBIE_VERSION=v0.28.0"
+  echo "  KUBECOLOR_VERSION=v0.6.0"
+  echo "  KUBECTL_TREE_VERSION=v0.6.0"
+  echo "  STERN_VERSION=v1.34.0"
+  echo "  CRICTL_VERSION=v1.36.0"
+  echo "  K8SGPT_VERSION=v0.4.33"
+  echo "  YQ_VERSION=v4.53.2"
+  echo "  KUBESPY_VERSION=v0.6.3"
   echo
 }
 
 interactive_menu() {
   while true; do
     print_menu
-    read -r -p "Select an option [0-13]: " choice
+    read -r -p "Select an option [0-22]: " choice
     echo
 
     case "${choice}" in
       1) install_all || true ;;
-      2) run_menu_action "Argo CD CLI" "install_argocd" ;;
-      3) run_menu_action "Vault CLI" "install_vault" ;;
-      4) run_menu_action "jq" "install_jq" ;;
-      5) run_menu_action "git" "install_git" ;;
-      6) run_menu_action "make" "install_make" ;;
+      2) run_menu_action "kubectl" "install_kubectl" ;;
+      3) run_menu_action "kubeadm" "install_kubeadm" ;;
+      4) run_menu_action "Helm" "install_helm" ;;
+      5) run_menu_action "Kustomize" "install_kustomize" ;;
+      6) run_menu_action "K9s" "install_k9s" ;;
       7) run_menu_action "tmux" "install_tmux" ;;
-      8) run_menu_action "k9s" "install_k9s" ;;
-      9) run_menu_action "Helm CLI" "install_helm" ;;
-      10) run_menu_action "crictl" "install_crictl" ;;
-      11) run_menu_action "yq" "install_yq" ;;
-      12) run_menu_action "Kustomize" "install_kustomize" ;;
-      13) verify_all ;;
+      8) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
+      9) run_menu_action "Kubie" "install_kubie" ;;
+      10) run_menu_action "Kubecolor" "install_kubecolor" ;;
+      11) run_menu_action "Stern" "install_stern" ;;
+      12) run_menu_action "crictl" "install_crictl" ;;
+      13) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
+      14) run_menu_action "kubespy" "install_kubespy" ;;
+      15) run_menu_action "Argo CD CLI" "install_argocd" ;;
+      16) run_menu_action "K8sGPT" "install_k8sgpt" ;;
+      17) run_menu_action "git" "install_git" ;;
+      18) run_menu_action "make" "install_make" ;;
+      19) run_menu_action "jq" "install_jq" ;;
+      20) run_menu_action "yq" "install_yq" ;;
+      21) run_menu_action "Vault CLI" "install_vault" ;;
+      22) verify_all ;;
       0|q|Q|quit|exit)
         echo -e "${GREEN}Goodbye.${RESET}"
         exit 0
@@ -623,22 +1100,52 @@ interactive_menu() {
 usage() {
   cat <<EOF
 Usage:
-  $0 [menu|all|argocd|vault|jq|git|make|tmux|k9s|helm|crictl|yq|kustomize|verify]
+  $0 [menu|all|verify|TOOL]
+
+Kubernetes Core, Packaging & Manifest Tools:
+  kubectl
+  kubeadm
+  helm
+  kustomize
+
+Cluster Navigation, Inspection & Efficiency:
+  k9s
+  tmux
+  kubectx-kubens
+  kubie
+  kubecolor
+
+Debugging & Observability:
+  stern
+  crictl
+  kubectl-tree
+  kubespy
+
+GitOps & Operational Diagnostics:
+  argocd
+  k8sgpt
+
+Workflow Automation & Source Control:
+  git
+  make
+  jq
+  yq
+
+Secrets & Security:
+  vault
 
 Examples:
   $0 menu
   $0 all
-  $0 helm
-  $0 tmux
-  $0 crictl
-  $0 yq
-  $0 kustomize
-  ARGOCD_VERSION=v3.2.0 $0 argocd
-  K9S_VERSION=v0.50.9 $0 k9s
-  HELM_VERSION=v3.19.0 $0 helm
-  CRICTL_VERSION=v1.34.0 $0 crictl
-  YQ_VERSION=v4.48.1 $0 yq
+  $0 kubectl
+  $0 kubectx-kubens
+  $0 kubecolor
+  $0 kubectl-tree
+  $0 k8sgpt
+  K8S_MINOR_VERSION=v1.34 $0 kubectl
   KUSTOMIZE_VERSION=v5.8.1 $0 kustomize
+  KUBECOLOR_VERSION=v0.6.0 $0 kubecolor
+  KUBECTL_TREE_VERSION=v0.6.0 $0 kubectl-tree
 
 Log file:
   ${LOG_FILE}
@@ -654,18 +1161,34 @@ main() {
   case "${cmd}" in
     menu) interactive_menu ;;
     all|install) install_all ;;
-    argocd) install_argocd ;;
-    vault) install_vault ;;
-    jq) install_jq ;;
+    verify) verify_all ;;
+
+    kubectl) install_kubectl ;;
+    kubeadm) install_kubeadm ;;
+    helm) install_helm ;;
+    kustomize) install_kustomize ;;
+
+    k9s) install_k9s ;;
+    tmux) install_tmux ;;
+    kubectx-kubens|kubectx|kubens) install_kubectx_kubens ;;
+    kubie) install_kubie ;;
+    kubecolor) install_kubecolor ;;
+    kubectl-tree|tree) install_kubectl_tree ;;
+
+    stern) install_stern ;;
+    crictl) install_crictl ;;
+
+    argocd|argo-cd) install_argocd ;;
+    k8sgpt) install_k8sgpt ;;
+
     git) install_git ;;
     make|make-tool) install_make ;;
-    tmux) install_tmux ;;
-    k9s) install_k9s ;;
-    helm) install_helm ;;
-    crictl) install_crictl ;;
+    jq) install_jq ;;
     yq) install_yq ;;
-    kustomize) install_kustomize ;;
-    verify) verify_all ;;
+
+    vault) install_vault ;;
+    kubespy) install_kubespy ;;
+
     help|-h|--help) usage ;;
     *)
       usage
