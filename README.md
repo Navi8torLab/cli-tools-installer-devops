@@ -217,6 +217,18 @@ Temporary PATH fix:
 export PATH=/usr/local/bin:$PATH
 ```
 
+If only Kustomize fails, install it again directly with:
+
+```bash
+make kustomize
+```
+
+Or pin a known Kustomize release:
+
+```bash
+make kustomize KUSTOMIZE_VERSION=v5.8.1
+```
+
 Review the installer log:
 
 ```bash

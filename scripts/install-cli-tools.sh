@@ -312,30 +312,43 @@ install_yq() {
 install_kustomize() {
   install_base_packages
 
-  local arch tag version encoded_tag url tmpdir archive
+  local arch version tag encoded_tag asset url tmpdir archive extracted_binary
   arch="$(get_arch)"
 
   if [[ "${KUSTOMIZE_VERSION}" == "latest" ]]; then
-    tag="$(latest_github_tag "kubernetes-sigs/kustomize")"
+    info "Finding latest Kustomize release"
+    version="$(
+      curl -fsSL "https://api.github.com/repos/kubernetes-sigs/kustomize/releases?per_page=100" \
+        | grep -m1 '"tag_name": "kustomize/v' \
+        | sed -E 's/.*"tag_name": "kustomize\/v?([^"]+)".*/v\1/'
+    )"
   else
-    version="${KUSTOMIZE_VERSION#kustomize/}"
-    [[ "${version}" == v* ]] || version="v${version}"
-    tag="kustomize/${version}"
+    version="${KUSTOMIZE_VERSION}"
+    version="${version#kustomize/}"
+    version="${version#v}"
+    version="v${version}"
   fi
 
-  [[ -n "${tag}" ]] || die "Unable to determine Kustomize version."
+  [[ -n "${version}" ]] || die "Unable to determine Kustomize version."
 
-  version="${tag#kustomize/}"
-  encoded_tag="${tag//\//%2F}"
-  url="https://github.com/kubernetes-sigs/kustomize/releases/download/${encoded_tag}/kustomize_${version}_linux_${arch}.tar.gz"
+  tag="kustomize/${version}"
+  encoded_tag="kustomize%2F${version}"
+  asset="kustomize_${version}_linux_${arch}.tar.gz"
+  url="https://github.com/kubernetes-sigs/kustomize/releases/download/${encoded_tag}/${asset}"
 
   tmpdir="$(mktemp -d)"
-  archive="${tmpdir}/kustomize.tar.gz"
+  archive="${tmpdir}/${asset}"
 
-  info "Installing Kustomize (${version})"
-  run curl -fsSL -o "${archive}" "${url}"
+  info "Installing Kustomize (${tag})"
+  run curl -fL --retry 3 --retry-delay 2 -o "${archive}" "${url}"
+
+  info "Extracting ${asset}"
   run tar -xzf "${archive}" -C "${tmpdir}"
-  run ${SUDO} install -m 0755 "${tmpdir}/kustomize" "${INSTALL_DIR}/kustomize"
+
+  extracted_binary="${tmpdir}/kustomize"
+  [[ -f "${extracted_binary}" ]] || die "Kustomize binary was not found after extracting ${asset}"
+
+  run ${SUDO} install -m 0755 "${extracted_binary}" "${INSTALL_DIR}/kustomize"
   rm -rf "${tmpdir}"
 
   command -v kustomize >/dev/null 2>&1 || die "kustomize installed to ${INSTALL_DIR}, but kustomize is not in PATH"
