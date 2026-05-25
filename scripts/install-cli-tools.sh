@@ -193,7 +193,7 @@ install_base_packages() {
     tar \
     gzip \
     openssl \
-    awk \
+    gawk \
     sed \
     grep \
     coreutils

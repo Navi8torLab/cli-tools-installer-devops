@@ -277,6 +277,17 @@ make install
 
 ## Troubleshooting
 
+### Base dependency fix
+
+This bundle uses `gawk` instead of the virtual package name `awk`. On newer Ubuntu releases, `awk` may be listed as a virtual package with no direct installation candidate, which causes this error:
+
+```text
+E: Package 'awk' has no installation candidate
+```
+
+`gawk` provides the `awk` command and avoids that apt failure.
+
+
 If a tool shows as `missing`, check whether `/usr/local/bin` is in your `PATH`:
 
 ```bash
