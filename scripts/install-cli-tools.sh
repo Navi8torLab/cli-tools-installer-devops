@@ -1039,9 +1039,9 @@ run_menu_action() {
 # Menu numbering contract:
 #   1  = Core Tools subset
 #   2  = All tools
-#   3+ = Individual tools in category order
-#   23 = Verify
-#   24 = Multi-select
+#   3  = Multi-select
+#   4  = Verify
+#   5+ = Individual tools in category order
 menu_row() {
   local number="$1"
   local label="$2"
@@ -1072,12 +1072,12 @@ print_menu() {
   echo -e "  terminal productivity."
   echo
   echo -e "${YELLOW}How to use this menu:${RESET}"
-  echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
   echo -e "  ${GREEN}•${RESET} Select option 1 to install only the Core Tools subset."
   echo -e "  ${GREEN}•${RESET} Select option 2 to install the full DevOps toolbelt."
-  echo -e "  ${GREEN}•${RESET} Select option 24 for multi-select, or type a list directly."
-  echo -e "  ${GREEN}•${RESET} Multi-select examples: 3,6,8-11 or 12-15,23."
-  echo -e "  ${GREEN}•${RESET} Select Verify versions after installation."
+  echo -e "  ${GREEN}•${RESET} Select option 3 for multi-select, or type a list directly."
+  echo -e "  ${GREEN}•${RESET} Select option 4 to verify installed tool versions."
+  echo -e "  ${GREEN}•${RESET} Select one tool to install it individually."
+  echo -e "  ${GREEN}•${RESET} Multi-select examples: 5,8,10-13 or 14-17,4."
   echo -e "  ${GREEN}•${RESET} Use version override variables below when pinning releases."
   echo
   echo -e "${YELLOW}Log file:${RESET} ${LOG_FILE}"
@@ -1085,42 +1085,42 @@ print_menu() {
 
   menu_row "1" "Install Core Tools" "Install argocd vault jq git make k9s helm crictl yq kustomize"
   menu_row "2" "Install ALL Tools" "Install every tool in category order"
+  menu_row "3" "Select multiple tools" "Install choices like 5,8,10-13"
+  menu_row "4" "Verify versions" "Show installed CLI versions by category"
 
   category_header "Kubernetes Core, Packaging & Manifest Tools"
-  menu_row "3" "kubectl" "Official Kubernetes CLI"
-  menu_row "4" "kubeadm" "Kubernetes cluster bootstrap CLI"
-  menu_row "5" "Helm" "Kubernetes package manager"
-  menu_row "6" "Kustomize" "Kubernetes YAML overlay manager"
+  menu_row "5" "kubectl" "Official Kubernetes CLI"
+  menu_row "6" "kubeadm" "Kubernetes cluster bootstrap CLI"
+  menu_row "7" "Helm" "Kubernetes package manager"
+  menu_row "8" "Kustomize" "Kubernetes YAML overlay manager"
 
   category_header "Cluster Navigation, Inspection & Efficiency"
-  menu_row "7" "K9s" "Terminal UI for Kubernetes"
-  menu_row "8" "tmux" "Persistent terminal multiplexer"
-  menu_row "9" "kubectx & kubens" "Switch kube contexts and namespaces"
-  menu_row "10" "Kubie" "Isolated kube context shells"
-  menu_row "11" "Kubecolor" "Colorized kubectl output wrapper"
+  menu_row "9" "K9s" "Terminal UI for Kubernetes"
+  menu_row "10" "tmux" "Persistent terminal multiplexer"
+  menu_row "11" "kubectx & kubens" "Switch kube contexts and namespaces"
+  menu_row "12" "Kubie" "Isolated kube context shells"
+  menu_row "13" "Kubecolor" "Colorized kubectl output wrapper"
 
   category_header "Debugging & Observability"
-  menu_row "12" "Stern" "Multi-pod log tailing"
-  menu_row "13" "crictl" "Container runtime CRI debug CLI"
-  menu_row "14" "kubectl tree" "Show Kubernetes ownership trees"
-  menu_row "15" "kubespy" "Watch Kubernetes resource changes"
+  menu_row "14" "Stern" "Multi-pod log tailing"
+  menu_row "15" "crictl" "Container runtime CRI debug CLI"
+  menu_row "16" "kubectl tree" "Show Kubernetes ownership trees"
+  menu_row "17" "kubespy" "Watch Kubernetes resource changes"
 
   category_header "GitOps & Operational Diagnostics"
-  menu_row "16" "Argo CD CLI" "GitOps continuous delivery CLI"
-  menu_row "17" "K8sGPT" "AI-assisted Kubernetes diagnostics"
+  menu_row "18" "Argo CD CLI" "GitOps continuous delivery CLI"
+  menu_row "19" "K8sGPT" "AI-assisted Kubernetes diagnostics"
 
   category_header "Workflow Automation & Source Control"
-  menu_row "18" "git" "Source control client"
-  menu_row "19" "make" "Task runner/build automation"
-  menu_row "20" "jq" "JSON query and formatting tool"
-  menu_row "21" "yq" "YAML/JSON processor"
+  menu_row "20" "git" "Source control client"
+  menu_row "21" "make" "Task runner/build automation"
+  menu_row "22" "jq" "JSON query and formatting tool"
+  menu_row "23" "yq" "YAML/JSON processor"
 
   category_header "Secrets & Security"
-  menu_row "22" "Vault CLI" "HashiCorp secrets management CLI"
+  menu_row "24" "Vault CLI" "HashiCorp secrets management CLI"
 
   echo
-  menu_row "23" "Verify versions" "Show installed CLI versions by category"
-  menu_row "24" "Select multiple tools" "Install choices like 3,6,8-11"
   menu_row "0" "Quit" "Exit installer"
 
   echo
@@ -1148,28 +1148,28 @@ run_menu_selection() {
   case "${choice}" in
     1) install_core_tools || true ;;
     2) install_all || true ;;
-    3) run_menu_action "kubectl" "install_kubectl" ;;
-    4) run_menu_action "kubeadm" "install_kubeadm" ;;
-    5) run_menu_action "Helm" "install_helm" ;;
-    6) run_menu_action "Kustomize" "install_kustomize" ;;
-    7) run_menu_action "K9s" "install_k9s" ;;
-    8) run_menu_action "tmux" "install_tmux" ;;
-    9) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
-    10) run_menu_action "Kubie" "install_kubie" ;;
-    11) run_menu_action "Kubecolor" "install_kubecolor" ;;
-    12) run_menu_action "Stern" "install_stern" ;;
-    13) run_menu_action "crictl" "install_crictl" ;;
-    14) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
-    15) run_menu_action "kubespy" "install_kubespy" ;;
-    16) run_menu_action "Argo CD CLI" "install_argocd" ;;
-    17) run_menu_action "K8sGPT" "install_k8sgpt" ;;
-    18) run_menu_action "git" "install_git" ;;
-    19) run_menu_action "make" "install_make" ;;
-    20) run_menu_action "jq" "install_jq" ;;
-    21) run_menu_action "yq" "install_yq" ;;
-    22) run_menu_action "Vault CLI" "install_vault" ;;
-    23) verify_all ;;
-    24) prompt_multi_select ;;
+    3) prompt_multi_select ;;
+    4) verify_all ;;
+    5) run_menu_action "kubectl" "install_kubectl" ;;
+    6) run_menu_action "kubeadm" "install_kubeadm" ;;
+    7) run_menu_action "Helm" "install_helm" ;;
+    8) run_menu_action "Kustomize" "install_kustomize" ;;
+    9) run_menu_action "K9s" "install_k9s" ;;
+    10) run_menu_action "tmux" "install_tmux" ;;
+    11) run_menu_action "kubectx & kubens" "install_kubectx_kubens" ;;
+    12) run_menu_action "Kubie" "install_kubie" ;;
+    13) run_menu_action "Kubecolor" "install_kubecolor" ;;
+    14) run_menu_action "Stern" "install_stern" ;;
+    15) run_menu_action "crictl" "install_crictl" ;;
+    16) run_menu_action "kubectl tree" "install_kubectl_tree" ;;
+    17) run_menu_action "kubespy" "install_kubespy" ;;
+    18) run_menu_action "Argo CD CLI" "install_argocd" ;;
+    19) run_menu_action "K8sGPT" "install_k8sgpt" ;;
+    20) run_menu_action "git" "install_git" ;;
+    21) run_menu_action "make" "install_make" ;;
+    22) run_menu_action "jq" "install_jq" ;;
+    23) run_menu_action "yq" "install_yq" ;;
+    24) run_menu_action "Vault CLI" "install_vault" ;;
     0|q|Q|quit|exit)
       echo -e "${GREEN}Goodbye.${RESET}"
       exit 0
@@ -1222,7 +1222,7 @@ run_multi_select() {
   mapfile -t expanded < <(expand_multi_select "${raw}")
 
   if [[ "${#expanded[@]}" -eq 0 ]]; then
-    warn "No valid selections found. Example: 3,6,8-11"
+    warn "No valid selections found. Example: 5,8,10-13"
     return 0
   fi
 
@@ -1256,8 +1256,8 @@ run_multi_select() {
         ;;
       1)
         ;;
-      24)
-        warn "Skipping option 24 inside multi-select to avoid recursion."
+      3)
+        warn "Skipping option 3 inside multi-select to avoid recursion."
         ;;
       *)
         run_menu_selection "${choice}"
@@ -1271,8 +1271,8 @@ prompt_multi_select() {
   echo -e "${BOLD}${CYAN}Multi-select mode${RESET}"
   echo "Enter menu numbers separated by commas. Ranges are supported."
   echo "Examples:"
-  echo "  3,6,8-11"
-  echo "  12-15,23"
+  echo "  5,8,10-13"
+  echo "  14-17,4"
   echo
   read -r -p "Enter selections: " selections
   run_multi_select "${selections}"
@@ -1300,8 +1300,8 @@ Usage:
   $0 [menu|all|core-tools|verify|TOOL]
 
 Interactive multi-select:
-  In the menu, choose option 24 or type a list directly.
-  Examples: 3,6,8-11 or 12-15,23
+  In the menu, choose option 3 or type a list directly.
+  Examples: 5,8,10-13 or 14-17,4
 
 Core Tools install subset:
   core-tools
@@ -1343,6 +1343,7 @@ Examples:
   $0 menu
   $0 core-tools
   $0 all
+  $0 verify
   $0 kubectl
   $0 kubectx-kubens
   $0 kubecolor

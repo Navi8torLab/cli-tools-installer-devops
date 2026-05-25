@@ -91,41 +91,41 @@ Purpose:
 
  1) Install Core Tools       Install argocd vault jq git make k9s helm crictl yq kustomize
  2) Install ALL Tools        Install every tool in category order
+ 3) Select multiple tools    Install choices like 5,8,10-13
+ 4) Verify versions          Show installed CLI versions by category
 
 Kubernetes Core, Packaging & Manifest Tools
- 3) kubectl                  Official Kubernetes CLI
- 4) kubeadm                  Kubernetes cluster bootstrap CLI
- 5) Helm                     Kubernetes package manager
- 6) Kustomize                Kubernetes YAML overlay manager
+ 5) kubectl                  Official Kubernetes CLI
+ 6) kubeadm                  Kubernetes cluster bootstrap CLI
+ 7) Helm                     Kubernetes package manager
+ 8) Kustomize                Kubernetes YAML overlay manager
 
 Cluster Navigation, Inspection & Efficiency
- 7) K9s                      Terminal UI for Kubernetes
- 8) tmux                     Persistent terminal multiplexer
- 9) kubectx & kubens         Switch kube contexts and namespaces
-10) Kubie                    Isolated kube context shells
-11) Kubecolor                Colorized kubectl output wrapper
+ 9) K9s                      Terminal UI for Kubernetes
+10) tmux                     Persistent terminal multiplexer
+11) kubectx & kubens         Switch kube contexts and namespaces
+12) Kubie                    Isolated kube context shells
+13) Kubecolor                Colorized kubectl output wrapper
 
 Debugging & Observability
-12) Stern                    Multi-pod log tailing
-13) crictl                   Container runtime CRI debug CLI
-14) kubectl tree             Show Kubernetes ownership trees
-15) kubespy                  Watch Kubernetes resource changes
+14) Stern                    Multi-pod log tailing
+15) crictl                   Container runtime CRI debug CLI
+16) kubectl tree             Show Kubernetes ownership trees
+17) kubespy                  Watch Kubernetes resource changes
 
 GitOps & Operational Diagnostics
-16) Argo CD CLI              GitOps continuous delivery CLI
-17) K8sGPT                   AI-assisted Kubernetes diagnostics
+18) Argo CD CLI              GitOps continuous delivery CLI
+19) K8sGPT                   AI-assisted Kubernetes diagnostics
 
 Workflow Automation & Source Control
-18) git                      Source control client
-19) make                     Task runner/build automation
-20) jq                       JSON query and formatting tool
-21) yq                       YAML/JSON processor
+20) git                      Source control client
+21) make                     Task runner/build automation
+22) jq                       JSON query and formatting tool
+23) yq                       YAML/JSON processor
 
 Secrets & Security
-22) Vault CLI                HashiCorp secrets management CLI
+24) Vault CLI                HashiCorp secrets management CLI
 
-23) Verify versions          Show installed CLI versions by category
-24) Select multiple tools    Install choices like 3,6,8-11
  0) Quit                     Exit installer
 ```
 
@@ -184,33 +184,35 @@ The install-all option installs each tool independently. If one tool fails, the 
 
 ## Multi-Select Install
 
-From the TUI menu, choose option `24` and enter comma-separated selections or ranges:
+From the TUI menu, choose option `3` and enter comma-separated selections or ranges:
 
 ```text
-3,6,8-11
+5,8,10-13
 ```
 
 You can also type the same list directly at the main prompt:
 
 ```text
-Select an option [0-24 or list]: 3,6,8-11
+Select an option [0-24 or list]: 5,8,10-13
 ```
 
 Ranges expand from left to right. For example:
 
 ```text
-8-11
+10-13
 ```
 
 expands to:
 
 ```text
-8 9 10 11
+10 11 12 13
 ```
 
 If option `2` is included in a multi-select list, the script runs the full install once and skips the remaining entries because option `2` already installs every tool.
 
 If option `1` is included in a multi-select list, the script runs the Core Tools install once and skips the duplicate option `1`.
+
+Option `3` is skipped inside multi-select to avoid recursion.
 
 ## Install One Tool or Category Item
 

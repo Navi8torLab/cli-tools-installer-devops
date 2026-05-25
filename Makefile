@@ -49,7 +49,7 @@ help:
 	@echo
 	@echo "Interactive:"
 	@echo "  make menu"
-	@echo "  In the menu, choose option 24 or type a list such as: 3,6,8-11"
+	@echo "  In the menu, choose option 3 or type a list such as: 5,8,10-13"
 	@echo
 	@echo "Install options:"
 	@echo "  make core-tools       # argocd vault jq git make k9s helm crictl yq kustomize"
