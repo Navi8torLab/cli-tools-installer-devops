@@ -251,3 +251,20 @@ less /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 - crictl is installed from the Kubernetes SIGs `cri-tools` GitHub release tarball.
 - yq is installed from the `mikefarah/yq` GitHub release binary.
 - Kustomize is installed from the Kubernetes SIGs `kustomize` GitHub release tarball.
+
+
+## Kustomize installer fix
+
+Kustomize latest-release detection is pipe-safe in this bundle. The script first writes the GitHub releases response to a temporary file, then parses the newest `kustomize/v*` release from that file. This avoids the `curl: (23) Failure writing output to destination` error that can happen when `grep -m1` or `head` closes a pipe early while `pipefail` is enabled.
+
+To install only Kustomize:
+
+```bash
+make kustomize
+```
+
+To pin a known Kustomize version:
+
+```bash
+make kustomize KUSTOMIZE_VERSION=v5.8.1
+```

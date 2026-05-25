@@ -312,15 +312,28 @@ install_yq() {
 install_kustomize() {
   install_base_packages
 
-  local arch version tag encoded_tag asset url tmpdir archive extracted_binary
+  local arch version tag encoded_tag asset url tmpdir archive extracted_binary releases_json
   arch="$(get_arch)"
+  tmpdir="$(mktemp -d)"
 
   if [[ "${KUSTOMIZE_VERSION}" == "latest" ]]; then
     info "Finding latest Kustomize release"
+    releases_json="${tmpdir}/kustomize-releases.json"
+
+    # Do not pipe curl directly into grep/head while pipefail is enabled.
+    # grep -m1/head can close the pipe early and make curl fail with:
+    #   curl: (23) Failure writing output to destination
+    run curl -fsSL -o "${releases_json}" "https://api.github.com/repos/kubernetes-sigs/kustomize/releases?per_page=100"
+
     version="$(
-      curl -fsSL "https://api.github.com/repos/kubernetes-sigs/kustomize/releases?per_page=100" \
-        | grep -m1 '"tag_name": "kustomize/v' \
-        | sed -E 's/.*"tag_name": "kustomize\/v?([^"]+)".*/v\1/'
+      awk -F'"' '
+        /"tag_name": "kustomize\/v/ {
+          value=$4
+          sub(/^kustomize\//, "", value)
+          print value
+          exit
+        }
+      ' "${releases_json}"
     )"
   else
     version="${KUSTOMIZE_VERSION}"
@@ -329,14 +342,15 @@ install_kustomize() {
     version="v${version}"
   fi
 
-  [[ -n "${version}" ]] || die "Unable to determine Kustomize version."
+  if [[ -z "${version}" ]]; then
+    rm -rf "${tmpdir}"
+    die "Unable to determine Kustomize version."
+  fi
 
   tag="kustomize/${version}"
   encoded_tag="kustomize%2F${version}"
   asset="kustomize_${version}_linux_${arch}.tar.gz"
   url="https://github.com/kubernetes-sigs/kustomize/releases/download/${encoded_tag}/${asset}"
-
-  tmpdir="$(mktemp -d)"
   archive="${tmpdir}/${asset}"
 
   info "Installing Kustomize (${tag})"
@@ -346,7 +360,10 @@ install_kustomize() {
   run tar -xzf "${archive}" -C "${tmpdir}"
 
   extracted_binary="${tmpdir}/kustomize"
-  [[ -f "${extracted_binary}" ]] || die "Kustomize binary was not found after extracting ${asset}"
+  if [[ ! -f "${extracted_binary}" ]]; then
+    rm -rf "${tmpdir}"
+    die "Kustomize binary was not found after extracting ${asset}"
+  fi
 
   run ${SUDO} install -m 0755 "${extracted_binary}" "${INSTALL_DIR}/kustomize"
   rm -rf "${tmpdir}"
@@ -489,6 +506,30 @@ install_all() {
   fi
 }
 
+
+run_menu_action() {
+  local label="$1"
+  local func="$2"
+  local rc=0
+
+  set +e
+  (
+    set -Eeuo pipefail
+    "${func}"
+  )
+  rc=$?
+  set -Eeuo pipefail
+
+  if [[ "${rc}" -eq 0 ]]; then
+    success "${label} completed"
+  else
+    error "${label} failed with exit code ${rc}"
+    echo -e "${YELLOW}Review log:${RESET} ${LOG_FILE}"
+  fi
+
+  return 0
+}
+
 # ---------- TUI ----------
 menu_row() {
   local number="$1"
@@ -554,17 +595,17 @@ interactive_menu() {
 
     case "${choice}" in
       1) install_all || true ;;
-      2) install_argocd ;;
-      3) install_vault ;;
-      4) install_jq ;;
-      5) install_git ;;
-      6) install_make ;;
-      7) install_tmux ;;
-      8) install_k9s ;;
-      9) install_helm ;;
-      10) install_crictl ;;
-      11) install_yq ;;
-      12) install_kustomize ;;
+      2) run_menu_action "Argo CD CLI" "install_argocd" ;;
+      3) run_menu_action "Vault CLI" "install_vault" ;;
+      4) run_menu_action "jq" "install_jq" ;;
+      5) run_menu_action "git" "install_git" ;;
+      6) run_menu_action "make" "install_make" ;;
+      7) run_menu_action "tmux" "install_tmux" ;;
+      8) run_menu_action "k9s" "install_k9s" ;;
+      9) run_menu_action "Helm CLI" "install_helm" ;;
+      10) run_menu_action "crictl" "install_crictl" ;;
+      11) run_menu_action "yq" "install_yq" ;;
+      12) run_menu_action "Kustomize" "install_kustomize" ;;
       13) verify_all ;;
       0|q|Q|quit|exit)
         echo -e "${GREEN}Goodbye.${RESET}"
