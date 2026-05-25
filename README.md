@@ -11,33 +11,20 @@ DevOps/Kubernetes tools for building, deploying, debugging, and operating cloud-
 | `jq` | JSON query and formatting tool |
 | `git` | Source control client |
 | `make` | Task runner and build automation tool |
+| `tmux` | Persistent terminal multiplexer for long-running shell sessions |
 | `k9s` | Terminal UI for Kubernetes cluster operations |
 | `helm` | Kubernetes package manager for Helm charts |
 | `crictl` | CLI for debugging CRI-compatible container runtimes such as containerd |
 | `yq` | YAML/JSON processor |
+| `kustomize` | Kubernetes YAML overlay and patch manager |
 
 ## Files
 
 ```text
-cli-tools-installer-devops-toolbelt-fixed/
+cli-tools-installer-devops-toolbelt-tmux-kustomize/
 ├── Makefile
 └── scripts/
     └── install-cli-tools.sh
-```
-
-## If Make is not installed yet
-
-Run the script directly first:
-
-```bash
-chmod +x scripts/install-cli-tools.sh
-./scripts/install-cli-tools.sh make
-```
-
-Then use:
-
-```bash
-make install
 ```
 
 ## Interactive colored TUI menu
@@ -62,11 +49,13 @@ Menu layout:
  4) jq                       JSON query and formatting tool
  5) git                      Source control client
  6) make                     Task runner/build automation
- 7) k9s                      Terminal UI for Kubernetes
- 8) Helm CLI                 Kubernetes package manager
- 9) crictl                   Container runtime CRI debug CLI
-10) yq                       YAML/JSON processor
-11) Verify versions          Show installed CLI versions
+ 7) tmux                     Persistent terminal multiplexer
+ 8) k9s                      Terminal UI for Kubernetes
+ 9) Helm CLI                 Kubernetes package manager
+10) crictl                   Container runtime CRI debug CLI
+11) yq                       YAML/JSON processor
+12) Kustomize                Kubernetes YAML overlay manager
+13) Verify versions          Show installed CLI versions
  0) Quit                     Exit installer
 ```
 
@@ -96,10 +85,12 @@ make vault
 make jq
 make git
 make make-tool
+make tmux
 make k9s
 make helm
 make crictl
 make yq
+make kustomize
 ```
 
 Equivalent direct script commands:
@@ -110,10 +101,12 @@ Equivalent direct script commands:
 ./scripts/install-cli-tools.sh jq
 ./scripts/install-cli-tools.sh git
 ./scripts/install-cli-tools.sh make
+./scripts/install-cli-tools.sh tmux
 ./scripts/install-cli-tools.sh k9s
 ./scripts/install-cli-tools.sh helm
 ./scripts/install-cli-tools.sh crictl
 ./scripts/install-cli-tools.sh yq
+./scripts/install-cli-tools.sh kustomize
 ```
 
 ## Verify installed tools
@@ -160,6 +153,12 @@ Install a specific yq version:
 make yq YQ_VERSION=v4.48.1
 ```
 
+Install a specific Kustomize version:
+
+```bash
+make kustomize KUSTOMIZE_VERSION=v5.8.1
+```
+
 Default behavior:
 
 ```text
@@ -169,6 +168,22 @@ HELM_MAJOR=3
 HELM_VERSION=
 CRICTL_VERSION=latest
 YQ_VERSION=latest
+KUSTOMIZE_VERSION=latest
+```
+
+## If Make is not installed yet
+
+Run the script directly first:
+
+```bash
+chmod +x scripts/install-cli-tools.sh
+./scripts/install-cli-tools.sh make
+```
+
+Then use:
+
+```bash
+make install
 ```
 
 ## Troubleshooting
@@ -177,7 +192,7 @@ If a tool still shows as `missing`, check whether `/usr/local/bin` is in your PA
 
 ```bash
 echo "$PATH"
-command -v argocd vault helm crictl yq
+command -v argocd vault helm crictl yq kustomize
 ```
 
 Temporary PATH fix:
@@ -200,10 +215,11 @@ less /tmp/devops-toolbelt-install-YYYYMMDD-HHMMSS.log
 
 ## Install method notes
 
-- `jq`, `git`, and `make` are installed using Ubuntu apt packages.
+- `jq`, `git`, `make`, and `tmux` are installed using Ubuntu apt packages.
 - Vault is installed using the HashiCorp apt repository.
 - Argo CD CLI is installed from the official GitHub release binary.
 - k9s is installed from the official GitHub `.deb` release asset.
 - Helm is installed using the official Helm install script.
 - crictl is installed from the Kubernetes SIGs `cri-tools` GitHub release tarball.
 - yq is installed from the `mikefarah/yq` GitHub release binary.
+- Kustomize is installed from the Kubernetes SIGs `kustomize` GitHub release tarball.

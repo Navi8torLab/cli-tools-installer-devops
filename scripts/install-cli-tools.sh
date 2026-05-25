@@ -12,6 +12,7 @@ HELM_MAJOR="${HELM_MAJOR:-3}"                # Default: Helm 3
 HELM_VERSION="${HELM_VERSION:-}"             # Example: v3.19.0. Empty = latest for HELM_MAJOR
 CRICTL_VERSION="${CRICTL_VERSION:-latest}"   # Example: v1.34.0 or latest
 YQ_VERSION="${YQ_VERSION:-latest}"           # Example: v4.48.1 or latest
+KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-latest}" # Example: v5.8.1, 5.8.1, or latest
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 LOG_FILE="${LOG_FILE:-/tmp/devops-toolbelt-install-$(date +%Y%m%d-%H%M%S).log}"
 
@@ -200,6 +201,10 @@ install_make() {
   install_apt_package "make"
 }
 
+install_tmux() {
+  install_apt_package "tmux"
+}
+
 install_k9s() {
   install_base_packages
 
@@ -302,6 +307,39 @@ install_yq() {
   success "yq installed at ${INSTALL_DIR}/yq"
 }
 
+install_kustomize() {
+  install_base_packages
+
+  local arch tag version encoded_tag url tmpdir archive
+  arch="$(get_arch)"
+
+  if [[ "${KUSTOMIZE_VERSION}" == "latest" ]]; then
+    tag="$(latest_github_tag "kubernetes-sigs/kustomize")"
+  else
+    version="${KUSTOMIZE_VERSION#kustomize/}"
+    [[ "${version}" == v* ]] || version="v${version}"
+    tag="kustomize/${version}"
+  fi
+
+  [[ -n "${tag}" ]] || die "Unable to determine Kustomize version."
+
+  version="${tag#kustomize/}"
+  encoded_tag="${tag//\//%2F}"
+  url="https://github.com/kubernetes-sigs/kustomize/releases/download/${encoded_tag}/kustomize_${version}_linux_${arch}.tar.gz"
+
+  tmpdir="$(mktemp -d)"
+  archive="${tmpdir}/kustomize.tar.gz"
+
+  info "Installing Kustomize (${version})"
+  run curl -fsSL -o "${archive}" "${url}"
+  run tar -xzf "${archive}" -C "${tmpdir}"
+  run ${SUDO} install -m 0755 "${tmpdir}/kustomize" "${INSTALL_DIR}/kustomize"
+  rm -rf "${tmpdir}"
+
+  command -v kustomize >/dev/null 2>&1 || die "kustomize installed to ${INSTALL_DIR}, but kustomize is not in PATH"
+  success "kustomize installed at ${INSTALL_DIR}/kustomize"
+}
+
 # ---------- Verification ----------
 version_of() {
   local tool="$1"
@@ -327,6 +365,9 @@ version_of() {
     make)
       make --version 2>/dev/null | head -n 1 || true
       ;;
+    tmux)
+      tmux -V 2>/dev/null || true
+      ;;
     k9s)
       k9s version --short 2>/dev/null || k9s version 2>/dev/null | head -n 5 || true
       ;;
@@ -339,6 +380,9 @@ version_of() {
     yq)
       yq --version 2>/dev/null || true
       ;;
+    kustomize)
+      kustomize version 2>/dev/null || true
+      ;;
     *)
       "${tool}" --version 2>/dev/null || true
       ;;
@@ -348,16 +392,16 @@ version_of() {
 verify_all() {
   echo
   echo -e "${BOLD}${CYAN}Installed CLI versions${RESET}"
-  printf "%-10s %s\n" "Tool" "Version"
-  printf "%-10s %s\n" "----" "-------"
+  printf "%-12s %s\n" "Tool" "Version"
+  printf "%-12s %s\n" "----" "-------"
 
   local tool
-  for tool in argocd vault jq git make k9s helm crictl yq; do
+  for tool in argocd vault jq git make tmux k9s helm crictl yq kustomize; do
     if command -v "${tool}" >/dev/null 2>&1; then
-      printf "%-10s " "${tool}"
+      printf "%-12s " "${tool}"
       version_of "${tool}" | head -n 1
     else
-      printf "%-10s %b\n" "${tool}" "${RED}missing${RESET}"
+      printf "%-12s %b\n" "${tool}" "${RED}missing${RESET}"
     fi
   done
 }
@@ -400,6 +444,7 @@ install_all() {
   install_one_with_summary "jq" "install_jq"
   install_one_with_summary "git" "install_git"
   install_one_with_summary "make" "install_make"
+  install_one_with_summary "tmux" "install_tmux"
 
   # Upstream release/repo-based tools.
   install_one_with_summary "helm" "install_helm"
@@ -408,6 +453,7 @@ install_all() {
   install_one_with_summary "k9s" "install_k9s"
   install_one_with_summary "crictl" "install_crictl"
   install_one_with_summary "yq" "install_yq"
+  install_one_with_summary "kustomize" "install_kustomize"
 
   echo
   echo -e "${BOLD}${CYAN}Install summary${RESET}"
@@ -451,11 +497,13 @@ print_menu() {
   menu_row "4"  "jq"                   "JSON query and formatting tool"
   menu_row "5"  "git"                  "Source control client"
   menu_row "6"  "make"                 "Task runner/build automation"
-  menu_row "7"  "k9s"                  "Terminal UI for Kubernetes"
-  menu_row "8"  "Helm CLI"             "Kubernetes package manager"
-  menu_row "9"  "crictl"               "Container runtime CRI debug CLI"
-  menu_row "10" "yq"                   "YAML/JSON processor"
-  menu_row "11" "Verify versions"      "Show installed CLI versions"
+  menu_row "7"  "tmux"                 "Persistent terminal multiplexer"
+  menu_row "8"  "k9s"                  "Terminal UI for Kubernetes"
+  menu_row "9"  "Helm CLI"             "Kubernetes package manager"
+  menu_row "10" "crictl"               "Container runtime CRI debug CLI"
+  menu_row "11" "yq"                   "YAML/JSON processor"
+  menu_row "12" "Kustomize"            "Kubernetes YAML overlay manager"
+  menu_row "13" "Verify versions"      "Show installed CLI versions"
   menu_row "0"  "Quit"                 "Exit installer"
   echo
   echo -e "${YELLOW}Version overrides:${RESET}"
@@ -465,13 +513,14 @@ print_menu() {
   echo "  HELM_VERSION=v3.19.0"
   echo "  CRICTL_VERSION=v1.34.0"
   echo "  YQ_VERSION=v4.48.1"
+  echo "  KUSTOMIZE_VERSION=v5.8.1"
   echo
 }
 
 interactive_menu() {
   while true; do
     print_menu
-    read -r -p "Select an option [0-11]: " choice
+    read -r -p "Select an option [0-13]: " choice
     echo
 
     case "${choice}" in
@@ -481,11 +530,13 @@ interactive_menu() {
       4) install_jq ;;
       5) install_git ;;
       6) install_make ;;
-      7) install_k9s ;;
-      8) install_helm ;;
-      9) install_crictl ;;
-      10) install_yq ;;
-      11) verify_all ;;
+      7) install_tmux ;;
+      8) install_k9s ;;
+      9) install_helm ;;
+      10) install_crictl ;;
+      11) install_yq ;;
+      12) install_kustomize ;;
+      13) verify_all ;;
       0|q|Q|quit|exit)
         echo -e "${GREEN}Goodbye.${RESET}"
         exit 0
@@ -502,19 +553,22 @@ interactive_menu() {
 usage() {
   cat <<EOF
 Usage:
-  $0 [menu|all|argocd|vault|jq|git|make|k9s|helm|crictl|yq|verify]
+  $0 [menu|all|argocd|vault|jq|git|make|tmux|k9s|helm|crictl|yq|kustomize|verify]
 
 Examples:
   $0 menu
   $0 all
   $0 helm
+  $0 tmux
   $0 crictl
   $0 yq
+  $0 kustomize
   ARGOCD_VERSION=v3.2.0 $0 argocd
   K9S_VERSION=v0.50.9 $0 k9s
   HELM_VERSION=v3.19.0 $0 helm
   CRICTL_VERSION=v1.34.0 $0 crictl
   YQ_VERSION=v4.48.1 $0 yq
+  KUSTOMIZE_VERSION=v5.8.1 $0 kustomize
 
 Log file:
   ${LOG_FILE}
@@ -535,10 +589,12 @@ main() {
     jq) install_jq ;;
     git) install_git ;;
     make|make-tool) install_make ;;
+    tmux) install_tmux ;;
     k9s) install_k9s ;;
     helm) install_helm ;;
     crictl) install_crictl ;;
     yq) install_yq ;;
+    kustomize) install_kustomize ;;
     verify) verify_all ;;
     help|-h|--help) usage ;;
     *)
